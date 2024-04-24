@@ -35,7 +35,9 @@ object param {
                                writeportNum: Int = 2,
 
                                outstandingLoad: Int = 2,
-                               fetchqueueEntries: Int = 4
+                               fetchqueueEntries: Int = 4,
+
+                               causeWidth: Int = 4,
 
                             )
   case class KlasE32Param(
@@ -86,6 +88,8 @@ trait HasCoreParameters {
   def csrWidthM = coreParams.mxLen
   def csrWidthS = coreParams.sxLen
   def csrWidthU = coreParams.uxLen
+
+  def causeWidth = coreParams.causeWidth
 }
 
 abstract class CoreModule(implicit val p: Parameters) extends Module with HasCoreParameters

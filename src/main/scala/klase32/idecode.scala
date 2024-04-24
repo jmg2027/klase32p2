@@ -182,6 +182,18 @@ object EBreakField extends InstBoolField {
   override def typeChecker = _.isInstanceOf[EBreakProperty]
 }
 
+case class MRetProperty(op: Bool) extends InstProperty(op)
+object MRetField extends InstBoolField {
+  override def name = "mret"
+  override def typeChecker = _.isInstanceOf[MRetProperty]
+}
+
+case class SRetProperty(op: Bool) extends InstProperty(op)
+object SRetField extends InstBoolField {
+  override def name = "sret"
+  override def typeChecker = _.isInstanceOf[SRetProperty]
+}
+
 case class FenceProperty(op: Bool) extends InstProperty(op)
 object FenceField extends InstBoolField {
   override def name = "fence"
@@ -378,8 +390,10 @@ object RV32IDecode extends InstDecode {
     new InstPattern(ECALL, ECallProperty(true.B)),
     new InstPattern(EBREAK, EBreakProperty(true.B)),
 
-    new InstPattern(SRET, RetCompProperty(PcType.SRet)),
-    new InstPattern(MRET, RetCompProperty(PcType.MRet)),
+    new InstPattern(SRET, RetCompProperty(PcType.SRet)
+    ++ SRetProperty(true.B)),
+    new InstPattern(MRET, RetCompProperty(PcType.MRet)
+    ++ MRetProperty(true.B)),
 
     new InstPattern(FENCE,
       WriteRdProperty(false.B) ++

@@ -11,23 +11,20 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
 
   val if_pc = Input(UInt(mxLen.W)) // Current PC
   // val ie_pc = Input(UInt(mxLen.W)) // 1 cycle before PC
+  val evec = Input(UInt(mxLen.W))
   val br = Output(Bool()) // FIX THIS
   val cnd = Input(Bool())
+  val xcpt = Input(Bool())
+  val eret = Input(Bool())
 
   val divBusy = Input(Bool())
-  val dmAck = Input(Bool())
-  val fence = Input(Bool())
   val hzdStall = Input(Bool())
-
 
   val ocdExe = Input(Bool())
   val ocdInst = Input(UInt(wordsize.W))
   val ocdReq = Input(Bool())
   val ocdAck = Output(Bool())
 
-  //val of13 = Input(UInt(13.W))
-  //val of21 = Input(UInt(21.W))
-  //val jalrTrgt = Input(UInt(mxLen.W))
   val aluR = Input(UInt(mxLen.W))
 
   val waitDmReq = Input(Bool())
@@ -36,10 +33,6 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
   val issue = Output(Bool())
 
   val pcRegWrite = Output(Valid(UInt(mxLen.W))) // Next PC
-
-  val procStall = Output(Bool())
-  val stallIE = Output(Bool())
-  // val divStall = Output(Bool())
 
   val inst = Output(Valid(UInt(wordsize.W))) // IF stage
 
@@ -60,8 +53,6 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val haltCond = (io.ctrl === HALT)
   val jalCond = (io.ctrl === JAL)
   val jalrCond = (io.ctrl === JALR) | (io.ctrl === MRET)
-
-  io.procStall := io.waitDmReq || io.waitPmPf // FIX THIS
 
   val bootingUpdate = Wire(Bool())
   val booting = Wire(Bool())
@@ -113,11 +104,6 @@ class Frontend(implicit p: Parameters) extends CoreModule {
     io.pcRegWrite.bits := 0.U
   }
 
-
-  // Stall by fence
-  // FIXME: Not used here
-  io.stallIE := io.fence && !io.dmAck
-
   // Fetch Queue
   // FIXME: Support for C extension
   // For now 32-bit N entries
@@ -154,6 +140,9 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val fetchPC = RegInit(bootAddrWire, UInt(mxLen.W))
   when (jump) {
     fetchPC := jumpPC
+    fq.flush := true.B
+  } elsewhen (io.xcpt || io.eret) {
+    fetchPC := io.evec
     fq.flush := true.B
   } otherwise {
     fetchPC := fetchPC + issueLength

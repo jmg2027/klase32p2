@@ -22,8 +22,6 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
     val addr = Input(UInt(k.addrWidth.W))
     val rddata = Output(UInt(k.dataWidth.W))
     val wrdata = Input(UInt(k.dataWidth.W))
-
-    val procStall = Output(Bool())
     }
   )
 

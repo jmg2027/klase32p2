@@ -64,9 +64,14 @@ object Interrupt {
 }
 
 class Stall extends Bundle {
- val hzd = Bool()
- val proc = Bool()
- val IE = Bool()
+  val ie = (new Bundle){
+    val store = Bool()
+  }
+  val me = (new Bundle){
+    val load = Bool()
+    val hzd = Bool()
+    val fence = Bool()
+  }
 }
 
 class ExternalMemoryInterfaceReq(implicit p: Parameters) extends Bundle {
