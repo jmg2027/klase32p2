@@ -6,6 +6,8 @@ import chisel3.experimental.BundleLiterals._
 import klase32.config._
 import klase32.param.KlasE32ParamKey
 
+import scala.collection.mutable
+
 // from rocket csr
 class MStatus extends Bundle {
   val sd = Bool()
@@ -134,8 +136,9 @@ object CSRAddr {
   val mseccfg = freechips.rocketchip.rocket.CSRs.mseccfg
 }
 
-class CSRStat(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
-  val mstatus = UInt(csrWidthM.W)
+// Reference: Rocket core
+class CSRList(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+  val mstatus = RegInit(0.U.asTypeOf(new MStatus))
   val mstatush = UInt(csrWidthM.W)
   val misa = UInt(csrWidthM.W)
   val medeleg = UInt(csrWidthM.W)
@@ -155,6 +158,29 @@ class CSRStat(implicit p: Parameters) extends CoreBundle with HasCoreParameters 
   val menvcfg = UInt(csrWidthM.W)
   val menvcfgh = UInt(csrWidthM.W)
   val mseccfg = UInt(csrWidthM.W)
+
+  val map = Map[Int, Bits](
+    CSRAddr.mstatus -> mstatus,
+    CSRAddr.mstatush -> mstatush,
+    CSRAddr.misa -> misa,
+    CSRAddr.medeleg -> medeleg,
+    CSRAddr.mideleg -> mideleg,
+    CSRAddr.mie -> mie,
+    CSRAddr.mtvec -> mtvec,
+    CSRAddr.mvendorid -> mvendorid,
+    CSRAddr.marchid -> marchid,
+    CSRAddr.mimpid -> mimpid,
+    CSRAddr.mhartid -> mhartid,
+    CSRAddr.mscratch -> mscratch,
+    CSRAddr.mepc -> mepc,
+    CSRAddr.mcause -> mcause,
+    CSRAddr.mtval -> mtval,
+    CSRAddr.mip -> mip,
+    CSRAddr.mconfigptr -> mconfigptr,
+    CSRAddr.menvcfg -> menvcfg,
+    CSRAddr.menvcfgh -> menvcfgh,
+    CSRAddr.mseccfg -> mseccfg,
+  )
 }
 
 class MISA(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
@@ -180,9 +206,12 @@ class MISA(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
   }
 }
 
-object CSRStat {
+object CSRList {
+  def apply(csr: CSRList): Unit = {
+
+  }
   def default(implicit p: Parameters) = {
-    (new CSRStat).Lit(
+    (new CSRList).Lit(
       _.mstatus -> 0.U.asTypeOf(new MStatus),
       _.mstatush -> 0.U.asTypeOf(new MStatush),
       _.misa -> (new MISA).default.U,
@@ -220,16 +249,15 @@ class CSRIntfIO(implicit p: Parameters) extends CoreBundle with HasCoreParameter
 
   val rd = Output(UInt(csrWidthM.W))
 
-  val irq = Input(new Interrupt)
+  val interrupt = Input(new Interrupt)
+  val excption = Input(Bool())
+  val cause = Input(UInt(5.W))
+
+  val hartId = Input(UInt(hartIDWidth.W))
 
   val br = Input(Bool())
   val jal = Input(Bool())
   val jalr = Input(Bool())
-}
-
-class CSRModuleIO(implicit p: Parameters) extends CoreBundle {
-  val ctrl = Input(UInt(CSRcontrolWidth.W))
-  val irq = new Interrupt
 }
 
 class CSRModule(implicit p: Parameters) extends CoreModule {
