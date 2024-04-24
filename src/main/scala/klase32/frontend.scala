@@ -82,21 +82,15 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   // Issue
   val issueable = !io.hzdStall && !io.divBusy
-  // Here fix when using RVC
+  // FIXME: RVC
   // val instrAvail = fq.io.deq.valid && (!io.pmPartial || isRVC(instIF)) && !regBooting
   val instrAvail = fq.io.deq.valid && !regBooting
-  // FIXME: Block br only or all jumps
-  val issue = instrAvail && !jump && issueable && !(debugmode || regDebugmode)
+  // When fq being flushed, NOP is issued(1 cycle stall)
+  val issue = instrAvail && issueable && !(debugmode || regDebugmode)
   // val issue = instrAvail && !brCond && issueable && !(debugmode || regDebugmode)
-  io.inst.bits := Mux(io.ocdExe, io.ocdInst, Mux(issue, predecodeFormatsResult, 0.U))
+  io.inst.bits := Mux(io.ocdExe, io.ocdInst, Mux(issue, instIF, 0.U))
   io.inst.valid := io.ocdExe || issue
   io.issue := issue
-
-
-  // Check for compressed mode
-  // io.epm.data does not support compressed mode I think... it will fetch full 32 bits inst maybe, so modification required
-
-  val predecodeFormatsResult = Mux(isRVC(instIF), Cat(Fill(16, 0.U), instIF(15,0)), instIF)
 
   // Next PC
   val leaveDebugmode = !debugmode && regDebugmode
@@ -105,21 +99,15 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val jalrIE = jalrCond && !io.hzdStall
   val jump = brIE || jalIE || jalrIE || regBooting || leaveDebugmode
 
-  // FIXME: ALU calculates jump target
-  //val jumpPC = Mux(brIE, io.ie_pc + Cat(Fill(19, io.of13(12))),
-  //             Mux(jalIE, io.ie_pc + Cat(Fill(11, io.of21(20))),
-  //             Mux(jalrIE, Cat(io.jalrTrgt(31, 1), 0.U), io.if_pc)))
   val jumpPC = Mux(brIE || jalIE || jalrIE, io.aluR, io.if_pc)
 
-  val incrPC = io.if_pc + issueLength
-
-  val nextPC = Mux(jump, jumpPC, incrPC)
+  val pcWrite = Mux(jump, jumpPC, io.if_pc + Mux(fq.io.deq.bits.rvc, 2.U, 4.U))
 
 
 
   when(jump || issue) {
     io.pcRegWrite.valid := true.B
-    io.pcRegWrite.bits := nextPC
+    io.pcRegWrite.bits := pcWrite
   } otherwise {
     io.pcRegWrite.valid := false.B
     io.pcRegWrite.bits := 0.U
@@ -138,6 +126,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val fq = Module(new Queue(new FetchQueueIntf, fetchqueueEntries, flow = true, hasFlush = true))
   fq.io.enq.bits.data := io.epm.data
   fq.io.enq.bits.xcpt := io.epm.xcpt
+  fq.io.enq.bits.rvc := isRVC(io.epm.data)
   fq.io.enq.valid := io.epm.ack // Suppose simultaneous ack and data response
 
   val instIF = fq.io.deq.bits.data
@@ -145,10 +134,6 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   fq.io.deq.ready := issue // issue signal will block when stalled
 
   // needs flush conditions more such as exception, interrupt, mret, replay
-  when (jump) {
-    fq.flush := true.B
-  }
-
   val fetch = !debugmode || fq.io.enq.ready
 
   io.epm.addr := Mux(fetch, fetchPC, 0.U)
@@ -160,7 +145,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   // Fetch PC
   def isRVC(inst: UInt): Bool = inst(1, 0) !== 3.U
-  val issueLength = Mux(isRVC(instIF), 2.U, 4.U)
+  val issueLength = Mux(isRVC(io.epm.data), 2.U, 4.U)
 
   val bootAddrWire = WireInit(bootAddrParam.U)
   if (usingOuterBoodAddr) {
@@ -169,6 +154,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val fetchPC = RegInit(bootAddrWire, UInt(mxLen.W))
   when (jump) {
     fetchPC := jumpPC
+    fq.flush := true.B
   } otherwise {
     fetchPC := fetchPC + issueLength
   }
