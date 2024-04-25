@@ -1,8 +1,9 @@
-package klase32.csr
+package klase32
 
 import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
+import klase32.CSR.CSRRegBundle
 import klase32.config._
 import klase32.param.KlasE32ParamKey
 
@@ -13,29 +14,38 @@ import klase32.HasCoreParameters
 // from rocket csr
 
 object CSR {
-  type T <: Data
-  private abstract class CSRRegTemplate(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+  abstract class CSRRegTemplate[T <: Data](implicit p: Parameters) extends CoreBundle with HasCoreParameters {
     val field: T
 
-    val default: UInt
+    def default: UInt
 
     def reg = RegInit(default.asTypeOf(field))
   }
-  class CSRReg(implicit p: Parameters, deafaultValue: UInt = 0.U) extends CSRRegTemplate {
-    val field = UInt(csrWidthM.W)
 
-    def default = deafaultValue
+  class CSRReg(implicit p: Parameters, defaultValue: UInt = 0.U) extends CSRRegTemplate[UInt] {
+    override val field = UInt(csrWidthM.W)
+
+    def default = defaultValue
   }
-  class MStatus(implicit p: Parameters) extends CSRRegTemplate {
-    val field = (new Bundle){
-      val sd = Bool()
-      val zero4 = UInt(23.W)
-      val mpv = Bool()
-      val gva = Bool()
-      val mbe = Bool()
-      val sbe = Bool()
-      val sxl = UInt(2.W)
-      val uxl = UInt(2.W) // uppers are for rv64
+
+  abstract class CSRRegBundle(implicit p: Parameters) {
+    def coreParams = p(KlasE32ParamKey).core
+    val field: Bundle
+    def default: UInt
+    def reg = RegInit(default.asTypeOf(field))
+  }
+
+//  class MStatus(implicit p: Parameters) extends CSRRegBundle {
+  class MStatus (implicit p: Parameters){
+    val field = new Bundle{
+//      val sd = Bool()
+//      val zero4 = UInt(23.W)
+//      val mpv = Bool()
+//      val gva = Bool()
+//      val mbe = Bool()
+//      val sbe = Bool()
+//      val sxl = UInt(2.W)
+//      val uxl = UInt(2.W) // uppers are for rv64
       val sd_rv32 = Bool()
       val zero3 = UInt(8.W)
       val tsr = Bool()
@@ -63,17 +73,19 @@ object CSR {
     }
 
     def default = 0.U
+    def reg = RegInit(default.asTypeOf(field))
   }
 
   // v1.12
-  class MStatush(implicit p: Parameters) extends CSRRegTemplate {
-    val field = (new Bundle){
+  class MStatush(implicit p: Parameters) {
+    val field = new Bundle{
       val mbe = Bool()
       val sbe = Bool()
       val zero0 = UInt(4.W)
     }
-    
+
     def default = 0.U
+    def reg = RegInit(default.asTypeOf(field))
   }
 
   // maybe can use this later
@@ -97,37 +109,38 @@ object CSR {
   }
   */
 
-  class MIP(implicit p: Parameters) extends CSRRegTemplate {
-    override val field = (new Bundle){
+  class MIP(implicit p: Parameters) {
+    val field = new Bundle {
       val zero7 = Bool()
       val debug = Bool() // keep in sync with CSR.debugIntCause
       val zero6 = UInt(2.W)
-      val meip = (new Interrupt).e
+      val meip = Bool()
       val zero5 = Bool()
       // val vseip = Bool() // spec out v1.12
-      val seip = (new Interrupt).e
+      val seip = Bool()
       val zero4 = Bool()
       // val ueip = Bool() // spec out v1.12
-      val mtip = (new Interrupt).t
+      val mtip = Bool()
       val zero3 = Bool()
       // val vstip = Bool() // spec out v1.12
-      val stip = (new Interrupt).t
+      val stip = Bool()
       val zero2 = Bool()
       // val utip = Bool() // spec out v1.12
-      val msip = (new Interrupt).s
+      val msip = Bool()
       val zero1 = Bool()
       // val vssip = Bool() // spec out v1.12
-      val ssip = (new Interrupt).s
+      val ssip = Bool()
       val zero0 = Bool()
       // val usip = Bool() // spec out v1.12
     }
     def default = 0.U
+    def reg = RegInit(default.asTypeOf(field))
   }
 
   class MIE(implicit p: Parameters) extends MIP
 
-  class Envcfg(implicit p: Parameters) extends CSRRegTemplate {
-    val field = (new Bundle) {    
+  class Envcfg(implicit p: Parameters) {
+    val field = new Bundle {
       val stce = Bool() // only for menvcfg/henvcfg
       val pbmte = Bool() // only for menvcfg/henvcfg
       val zero54 = UInt(54.W)
@@ -138,10 +151,13 @@ object CSR {
       val zero3 = UInt(3.W)
       val fiom = Bool()
     }
+
+    def default = 0.U
+    def reg = RegInit(default.asTypeOf(field))
   }
 
-  class MISA(implicit p: Parameters) extends CSRRegTemplate {
-    def default: UInt = {
+  class MISA(implicit p: Parameters) extends CSRReg {
+    override def default: UInt = {
       val isaMaskString =
         (if (usingMulDiv) "M" else "") +
           (if (usingAtomics) "A" else "") +
@@ -157,13 +173,12 @@ object CSR {
         (if (usingSupervisor) "S" else "") +
         (if (usingHypervisor) "H" else "") +
         (if (usingUser) "U" else "")
-      val isaMax = (BigInt(log2Ceil(mxLen) - 4) << (mxLen - 2)) | 
+      val isaMax = (BigInt(log2Ceil(mxLen) - 4) << (mxLen - 2)) |
         isaString.map(x => 1 << (x - 'A'))
-        .foldLeft((0))(_ | _)
+          .foldLeft((0))(_ | _)
       isaMax.U
     }
   }
-
 
   object CSRAddr {
     val mstatus = freechips.rocketchip.rocket.CSRs.mstatus
@@ -189,7 +204,7 @@ object CSR {
   }
 
   class CSRList(implicit p: Parameters)
-      extends CoreBundle
+    extends CoreBundle
       with HasCoreParameters {
     val mstatus = new MStatus
     val mstatush = new MStatush
@@ -201,21 +216,21 @@ object CSR {
     val mvendorid = new CSRReg
     val marchid = new CSRReg
     val mimpid = new CSRReg
-    val mhartid = new CSRReg()
+    val mhartid = new CSRReg
     val mscratch = new CSRReg
     val mepc = new CSRReg
     val mcause = new CSRReg
     val mtval = new CSRReg
     val mip = new MIP
     val mconfigptr = new CSRReg
-    val menvcfg = new CSRReg
+    val menvcfg = new Envcfg
     val menvcfgh = new Envcfg
     val mseccfg = new CSRReg
   }
 }
 
 class CSRCtrl(implicit p: Parameters)
-    extends CoreBundle
+  extends CoreBundle
     with HasCoreParameters {
   val in = UInt(csrWidthM.W)
   val inst = CSRInstMuxIE()
@@ -223,7 +238,7 @@ class CSRCtrl(implicit p: Parameters)
 }
 
 class CSRIntfIO(implicit p: Parameters)
-    extends CoreBundle
+  extends CoreBundle
     with HasCoreParameters {
   val ctrl = Input(new CSRCtrl())
 
@@ -232,32 +247,34 @@ class CSRIntfIO(implicit p: Parameters)
   val rd = Output(UInt(csrWidthM.W))
 
   val interrupt = Input(new Interrupt)
-  val excption = Input(Bool())
+  val exception = Input(Bool())
   val cause = Input(UInt(5.W))
 
-  val interruptPending = Output(Bool())
-  val interruptCause = Output(UInt(csrWidthM.W))
+//  val interruptPending = Output(Bool())
+//  val interruptCause = Output(UInt(4.W))
 
   val hartId = Input(UInt(hartIDWidth.W))
 
-  val br = Input(Bool())
-  val jal = Input(Bool())
-  val jalr = Input(Bool())
-
-  val ecall = Input(new EcallIE)
-  val ebreak = Input(new EbreakIE)
+  val ecall = Input(EcallIE())
+  val ebreak = Input(EbreakIE())
   // val mret = Input
-  val wfi = Input(new WFIIE)
+  val wfi = Input(WFIIE())
 }
 
 class CSRModule(implicit p: Parameters) extends CoreModule {
   import CSR._
+  import CSRInstMuxIE._
 
   val io = IO(new CSRIntfIO)
   val csr = new CSRList
 
-  csr.mhartid.reg := io.hartID
-  
+  io.out := DontCare
+
+  csr.mhartid.reg := io.hartId
+
+  val mstatusreg = csr.mstatus.reg
+  val sd_rv32 = mstatusreg.sd_rv32
+
   val csrMap = Map(
     CSRAddr.mstatus -> csr.mstatus.reg,
     CSRAddr.mstatush -> csr.mstatush.reg,
@@ -281,58 +298,61 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     CSRAddr.mseccfg -> csr.mseccfg.reg,
   )
 
-  val csrAddr = csrMap.map { case (k, v) => (io.ctrl.addr === k) -> v }
+  val csrAddr = csrMap map {case (k, v) => k -> (io.ctrl.addr === k.U)}
 
-  io.rd := Mux1H(for ((k, v) <- csrMap) yield (csrAddr(k) -> v))
+    io.rd := Mux1H(for ((k, v) <- csrMap) yield (csrAddr(k) -> v.asUInt))
 
   val wen = (io.ctrl.inst === RW) && (io.ctrl.inst === RS) && (io.ctrl.inst === RC)
   val wdata = Mux1H(Seq(
     (io.ctrl.inst === RW) -> io.ctrl.in,
-    (io.ctrl.inst === RS) -> io.ctrl.in | io.rd,
-    (io.ctrl.inst === RC) -> io.ctrl.in & ~io.rd,
+    (io.ctrl.inst === RS) -> (io.ctrl.in | io.rd),
+    (io.ctrl.inst === RC) -> (io.ctrl.in & (~io.rd).asUInt),
   ))
 
   when (wen) {
-    when (csrAddr(CSRAddr.mstatus)) {csr.mstatus.reg := wdata.asTypeOf(new MStatus)}
-    when (csrAddr(CSRAddr.mstatush)) {csr.mstatus.reg := wdata.asTypeOf(new MStatush)}
+    when (csrAddr(CSRAddr.mstatus)) {csr.mstatus.reg := wdata.asTypeOf((new MStatus).field)}
+    when (csrAddr(CSRAddr.mstatush)) {csr.mstatush.reg := wdata.asTypeOf((new MStatush).field)}
     // when (csrAddr(CSRAddr.misa)) {}
     when (csrAddr(CSRAddr.medeleg)) {csr.medeleg.reg := wdata}
     when (csrAddr(CSRAddr.mideleg)) {csr.mideleg.reg := wdata}
-    when (csrAddr(CSRAddr.mie)) {csr.mie.reg := wdata.asTypeOf(new MIE)}
+    when (csrAddr(CSRAddr.mie)) {csr.mie.reg := wdata.asTypeOf((new MIE).field)}
     when (csrAddr(CSRAddr.mtvec)) {csr.mtvec.reg := wdata}
     // when (csrAddr(CSRAddr.mvendorid)) {}
     // when (csrAddr(CSRAddr.marchid)) {}
     // when (csrAddr(CSRAddr.mimpid)) {}
     // when (csrAddr(CSRAddr.mhartid)) {}
     when (csrAddr(CSRAddr.mscratch)) {csr.mscratch.reg := wdata}
-    when (csrAddr(CSRAddr.mepc)) {csr.mepc.reg := 
+    when (csrAddr(CSRAddr.mepc)) {csr.mepc.reg :=
       (if (usingCompressed) Cat(wdata(mxLen-1, 1), 0.U(1.W)) else Cat(wdata(mxLen-1, 2), 0.U(2.W)))
     }
-    when (csrAddr(CSRAddr.mcause)) {csr.mstatus.reg := wdata & ((1 << (mxLen-1)) | ((1 << causeWidth) - 1)).U}
+    // If not bigint wrapped, compile error for overflow occurs
+    when (csrAddr(CSRAddr.mcause)) {csr.mcause.reg := wdata & ((BigInt(1) << (mxLen-1)) | ((BigInt(1) << causeWidth) - 1)).U}
     when (csrAddr(CSRAddr.mtval)) {csr.mtval.reg := wdata}
-    when (csrAddr(CSRAddr.mip)) {csr.mip.reg := wdata.asTypeOf(new MIP)}
+    when (csrAddr(CSRAddr.mip)) {csr.mip.reg := wdata.asTypeOf((new MIP).field)}
     // when (csrAddr(CSRAddr.mconfigptr)) {}
     when (csrAddr(CSRAddr.menvcfg)) {
       // Support S-mode or satp.MODE is read-only zero then don't write
-      csr.menvcfg.reg.field.fiom := wdata.asTypeOf(new Envcfg).field.fiom
+      csr.menvcfg.reg.fiom := wdata.asTypeOf((new Envcfg).field).fiom
     }
     // when (csrAddr(CSRAddr.menvcfgh)) {}
     // when (csrAddr(CSRAddr.mseccfg)) {}
 
     // Exception
-    val exception = ecall || ebreak || io.exception
+    val exception = io.ecall.asUInt.orR || io.ebreak.asUInt.orR || io.exception
 
     // Interrupt
-    csr.mip.reg.meip := io.interrupt.e
-    csr.mip.reg.mtip := io.interrupt.t
-    csr.mip.reg.msip := io.interrupt.s
+//    val mip = WireDefault(csr.mip.reg)
+    val mip = WireInit(0.U.asTypeOf(csr.mip.reg))
+    mip.meip := io.interrupt.e
+    mip.mtip := io.interrupt.t
+    mip.msip := io.interrupt.s
 
-    val interruptPending = (csr.mie.reg & csr.mip.reg).orR
-    io.interruptCause := Mux1H (Seq(
-      csr.mip.reg.meip && csr.mie.reg.meip -> 11.U,
-      csr.mip.reg.mtip && csr.mie.reg.mtip -> 7.U,
-      csr.mip.reg.msip && csr.mie.reg.msip -> 3.U,
-    ))
-
+    val mInterruptPending = (csr.mie.reg.asUInt & mip.asUInt).orR
+//    io.interruptPending := mInterruptPending
+//    io.interruptCause := Mux1H (Seq(
+//      (csr.mip.reg.meip && csr.mie.reg.meip) -> 11.U,
+//      (csr.mip.reg.mtip && csr.mie.reg.mtip) -> 7.U,
+//      (csr.mip.reg.msip && csr.mie.reg.msip) -> 3.U,
+//    ))
   }
 }
