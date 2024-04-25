@@ -25,10 +25,10 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
 
   val pcRegWrite = Output(Valid(UInt(mxLen.W))) // Next PC
 
-  val instPacket = Output(Valid(new Bundle {
+  val instPacket = Output(new Bundle {
     val inst = UInt(wordsize.W)
     val xcpt = new HeartXcpt
-  })) // IF stage
+  }) // IF stage
 
   val flushEn = Input(IcacheFlushIE())
 
@@ -137,7 +137,6 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   fq.io.deq.ready := issue // issue signal will block when stalled
   io.instPacket.bits.inst := Mux(issue, instIF, 0.U)
   io.instPacket.bits.xcpt := Mux(issue, xcptIF, 0.U.asTypeOf(new HeartXcpt))
-  io.instPacket.valid := issue
   io.issue := issue
 
 

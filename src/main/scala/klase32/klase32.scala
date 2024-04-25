@@ -60,6 +60,8 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   when (io.edm.st_req) {
     stallSig.ie.store := !io.edm.st_ack
   }
+  stallSig.ie.issue := !frontennd.io.issue
+  stallSig.me.wfi := !csr.io.wfiOut
   stallSig.me.hzd := hzd.io.stall
   stallSig.me.fence := ctrlSig.fence.asUInt.orR && (io.edm.ld_ack || io.edm.st_ack)
   val stallIE = stallSig.ie.asUInt.orR
@@ -74,13 +76,15 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
 
   // Pipeline
-  val ie_inst = RegEnable(frontend.io.instPacket.bits.inst, bitPatToUInt(NOP), frontend.io.instPacket.valid && !stall)
-  val ie_pc = RegEnable(pcReg, frontend.io.issue && !stall)
+  val ie_inst = RegEnable(frontend.io.instPacket.bits.inst, bitPatToUInt(NOP), !stall)
+  val ie_pc = RegEnable(pcReg,!stall)
 
   val me_inst = RegEnable(ie_inst, bitPatToUInt(NOP), !stallME)
+  val me_pc = RegEnable(ie_pc, !stallME)
   val me_lsu = RegEnable(ctrlSig.lsuCtrl, !stallME)
   val me_isLoad = RegEnable(ctrlSig.lsuCtrl.isLoad, !stallME)
   val me_rdaddr = RegEnable(ctrlSig.rd, !stallME)
+  val me_aluR = RegEnable(alu.io.R, !stallME)
 
 
   // Exception
@@ -113,8 +117,6 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   ))
 
 
-  csr.io.exception := meXcpt
-  csr.io.cause := meCause
 
   // Fetch & Issue
   io.epm <> frontend.io.epm
@@ -128,7 +130,7 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   frontend.io.divBusy := DontCare
 
   frontend.io.if_pc := pcReg
-  frontend.io.evec := csr.io.out.mtvec.asUInt
+  frontend.io.evec := csr.io.evec
   frontend.io.cnd := alu.io.F
   frontend.io.exception := meXcpt
   frontend.io.eret := ctrlSig.ecall.asUInt.orR || ctrlSig.ebreak.asUInt.orR || ctrlSig.mret.asUInt.orR
@@ -146,8 +148,8 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // Register file
   reg.io.rp(0).addr := ctrlSig.rs1
   reg.io.rp(1).addr := ctrlSig.rs2
-  val rs1 = reg.io.rp(0).data
-  val rs2 = reg.io.rp(1).data
+  val rs1 = Mux(hzd.io.bypassRS1RD, reg.io.rp(0).data, lsu.io.rddata)
+  val rs2 = Mux(hzd.io.bypassRS2RD, reg.io.rp(1).data, lsu.io.rddata)
 
   reg.io.wp(0).bits.addr := ctrlSig.rd
   reg.io.wp(1).bits.addr := ctrlSig.rd
@@ -179,8 +181,6 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   ).map { case (k, v) => (k === ctrlSig.operandSelect.a, v) })
 
 
-
-
   // CSR
   csr.io.ctrl.inst := ctrlSig.csrCtrl
   csr.io.ctrl.in := alu.io.R
@@ -189,7 +189,13 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   csr.io.hartId := hartId.U
   csr.io.ecall := ctrlSig.ecall
   csr.io.ebreak := ctrlSig.ebreak
+  csr.io.mret := ctrlSig.mret
   csr.io.wfi := ctrlSig.wfi
+
+  csr.io.exception := meXcpt
+  csr.io.cause := meCause
+  csr.io.epc := me_pc
+  csr.io.loadAddr := me_aluR
 
   // interrupt
   csr.io.interrupt := io.interrupt

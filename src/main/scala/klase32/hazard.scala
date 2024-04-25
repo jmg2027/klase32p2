@@ -25,10 +25,12 @@ class Hazards(implicit p: Parameters) extends CoreModule {
     // val divWnc = Input(Bool())
 
     val stall = Output(Bool())
+    val bypassRS1RD = Output(Bool())
+    val bypassRS2RD = Output(Bool())
   }
   )
 
-  val RAWHWraw = Wire(Bool())
+  val RAWHWraw = false.B
   // val read_after_divHWraw = Wire(Bool())
   // val write_after_divHWwaw = Wire(Bool())
   // val write_after_div_1HWwaw = Wire(Bool())
@@ -40,14 +42,18 @@ class Hazards(implicit p: Parameters) extends CoreModule {
 
   // RS1 === Load RD
   // RS2 === Load RD
-  when(
-    (io.loadValid && io.rs1Valid && (io.rs1Addr === io.rdAddr)) ||
-      (io.loadValid && io.rs2Valid && (io.rs2Addr === io.rdAddr))
-  ) {
-    RAWHWraw := 1.U
-  }.otherwise {
-    RAWHWraw := 0.U
+  io.bypassRS1RD := false.B
+  when(io.loadValid && io.rs1Valid && (io.rs1Addr === io.rdAddr)) {
+    io.bypassRS1RD := true.B
   }
+    
+  io.bypassRS2RD := false.B
+  when (io.loadValid && io.rs2Valid && (io.rs2Addr === io.rdAddr)) {
+    io.bypassRS2RD := true.B
+  }
+
+  // Bypass
+ 
 
   // when(
   //   (io.divBusy && io.ctrlIE(0) && (io.rs1Addr === io.divAddr)) ||

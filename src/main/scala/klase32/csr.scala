@@ -156,6 +156,16 @@ object CSR {
     def reg = RegInit(default.asTypeOf(field))
   }
 
+  class TVec(implicit p: Parameters) {
+    val field = new Bundle {
+      val base = UInt((mxLen-2).W)
+      val mode = UInt(2.W)
+    }
+
+    def default = 0.U
+    def reg = RegInit(default.asTypeOf(field))
+  }
+
   class MISA(implicit p: Parameters) extends CSRReg {
     override def default: UInt = {
       val isaMaskString =
@@ -212,7 +222,7 @@ object CSR {
     val medeleg = new CSRReg
     val mideleg = new CSRReg
     val mie = new MIE
-    val mtvec = new CSRReg
+    val mtvec = new TVec
     val mvendorid = new CSRReg
     val marchid = new CSRReg
     val mimpid = new CSRReg
@@ -246,9 +256,13 @@ class CSRIntfIO(implicit p: Parameters)
 
   val rd = Output(UInt(csrWidthM.W))
 
-  val interrupt = Input(new Interrupt)
   val exception = Input(Bool())
   val cause = Input(UInt(5.W))
+  val epc = Input(UInt(mxLen.W))
+  val evec = Output(UInt(mxLen.W))
+  val loadAddr = Input(UInt(mxLen.W))
+
+  val interrupt = Input(new Interrupt)
 
 //  val interruptPending = Output(Bool())
 //  val interruptCause = Output(UInt(4.W))
@@ -257,8 +271,10 @@ class CSRIntfIO(implicit p: Parameters)
 
   val ecall = Input(EcallIE())
   val ebreak = Input(EbreakIE())
-  // val mret = Input
+  val mret = Input(MretIE())
   val wfi = Input(WFIIE())
+  
+  val wfiOut = Output(Bool())
 }
 
 class CSRModule(implicit p: Parameters) extends CoreModule {
@@ -316,7 +332,7 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     when (csrAddr(CSRAddr.medeleg)) {csr.medeleg.reg := wdata}
     when (csrAddr(CSRAddr.mideleg)) {csr.mideleg.reg := wdata}
     when (csrAddr(CSRAddr.mie)) {csr.mie.reg := wdata.asTypeOf((new MIE).field)}
-    when (csrAddr(CSRAddr.mtvec)) {csr.mtvec.reg := wdata}
+    when (csrAddr(CSRAddr.mtvec)) {csr.mtvec.reg := wdata.asTypeOf((new TVec).field)}
     // when (csrAddr(CSRAddr.mvendorid)) {}
     // when (csrAddr(CSRAddr.marchid)) {}
     // when (csrAddr(CSRAddr.mimpid)) {}
@@ -340,6 +356,18 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     // Exception
     val exception = io.ecall.asUInt.orR || io.ebreak.asUInt.orR || io.exception
 
+    io.evec = Mux(csr.mtvec.reg.mode === 0.U, csr.mtvec.reg.base, csr.mtvec.reg.base + (io.cause << 2))
+    val tval = Mux(io.ebreak.orR, io.epc, io.loadAddr)
+    when (exception) {
+      csr.mepc.reg := io.epc
+      csr.mcause.reg := io.cause
+      csr.mtval.reg := tval
+    }
+
+    when (io.mret) {
+      io.evec := csr.mepc.reg
+    }
+
     // Interrupt
 //    val mip = WireDefault(csr.mip.reg)
     val mip = WireInit(0.U.asTypeOf(csr.mip.reg))
@@ -354,5 +382,14 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
 //      (csr.mip.reg.mtip && csr.mie.reg.mtip) -> 7.U,
 //      (csr.mip.reg.msip && csr.mie.reg.msip) -> 3.U,
 //    ))
+  }
+
+  // WFI
+  val wfi = RegInit(false.B)
+  when (io.wfi) {
+    wfi := true.B
+  }
+  when (mInterruptPending) {
+    wfi := false.B
   }
 }

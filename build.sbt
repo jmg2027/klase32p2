@@ -47,6 +47,9 @@ lazy val rocket_macros  = (project in rocketChipDir / "macros")
 lazy val ucb_hardfloat = (project in rocketChipDir / "hardfloat")
   .settings(commonSettings)
 
+lazy val diplomacy = (project in rocketChipDir / "diplomacy")
+  .settings(commonSettings)
+
 
 lazy val rocket_chip = (project in rocketChipDir)
   .dependsOn(cde, rocket_macros, ucb_hardfloat)
