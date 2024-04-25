@@ -68,8 +68,8 @@ abstract class InstBoolField extends BoolDecodeField[InstPattern] {
   * Definitions of Decoder Properties and Fields
   */
 
-case class IllegalProperty(f: Bool) extends InstProperty(f)
-object IllegalField extends InstBoolField {
+case class IllegalProperty(op: IllegalInstIE.Type) extends InstProperty(op)
+object IllegalField extends InstEnumField(IllegalInstIE) {
   override def name = "illegal"
   override def typeChecker = _.isInstanceOf[IllegalProperty]
 }
@@ -134,6 +134,12 @@ object NextPcField extends InstEnumField(PcType) {
   override def typeChecker = _.isInstanceOf[NextPcProperty]
 }
 
+case class CtrlControlIEProperty(op: CtrlControlIE.Type) extends InstProperty(op)
+object CtrlControlIEField extends InstEnumField(CtrlControlIE) {
+  override def name = "decoded jumps"
+  override def typeChecker = _.isInstanceOf[CtrlControlIEProperty]
+}
+
 case class LSUControlIEProperty(op: LSUControlIE.Type) extends InstProperty(op)
 object LSUControlIEField extends InstEnumField(LSUControlIE) {
   override def name = "lsu st/ld/size"
@@ -170,20 +176,20 @@ object SignedField extends InstEnumField(SignedControl) {
   override def typeChecker = _.isInstanceOf[SignedProperty]
 }
 
-case class ECallProperty(op: Bool) extends InstProperty(op)
-object ECallField extends InstBoolField {
+case class ECallProperty(op: EcallIE.Type) extends InstProperty(op)
+object ECallField extends InstEnumField(EcallIE) {
   override def name = "ecall"
   override def typeChecker = _.isInstanceOf[ECallProperty]
 }
 
-case class EBreakProperty(op: Bool) extends InstProperty(op)
-object EBreakField extends InstBoolField {
+case class EBreakProperty(op: EbreakIE.Type) extends InstProperty(op)
+object EBreakField extends InstEnumField(EbreakIE) {
   override def name = "ebreak"
   override def typeChecker = _.isInstanceOf[EBreakProperty]
 }
 
-case class MRetProperty(op: Bool) extends InstProperty(op)
-object MRetField extends InstBoolField {
+case class MRetProperty(op: MRetIE.Type) extends InstProperty(op)
+object MRetField extends InstEnumField(MRetIE) {
   override def name = "mret"
   override def typeChecker = _.isInstanceOf[MRetProperty]
 }
@@ -194,14 +200,14 @@ object SRetField extends InstBoolField {
   override def typeChecker = _.isInstanceOf[SRetProperty]
 }
 
-case class FenceProperty(op: Bool) extends InstProperty(op)
-object FenceField extends InstBoolField {
+case class FenceProperty(op: FenceEnableIE.Type) extends InstProperty(op)
+object FenceField extends InstEnumField(FenceEnableIE) {
   override def name = "fence"
   override def typeChecker = _.isInstanceOf[FenceProperty]
 }
 
-case class FlushICacheProperty(op: Bool) extends InstProperty(op)
-object FlushICacheField extends InstBoolField {
+case class FlushICacheProperty(op: IcacheFlushIE.Type) extends InstProperty(op)
+object FlushICacheField extends InstEnumField(IcacheFlushIE) {
   override def name = "flush i cache"
   override def typeChecker = _.isInstanceOf[FlushICacheProperty]
 }
@@ -212,8 +218,8 @@ object FlushTLBField extends InstBoolField {
   override def typeChecker = _.isInstanceOf[FlushTLBProperty]
 }
 
-case class WFIProperty(op: Bool) extends InstProperty(op)
-object WFIField extends InstBoolField {
+case class WFIProperty(op: WFIIE.Type) extends InstProperty(op)
+object WFIField extends InstEnumField(WFIIE) {
   override def name = "wfi"
   override def typeChecker = _.isInstanceOf[WFIProperty]
 }
@@ -387,21 +393,21 @@ object RV32IDecode extends InstDecode {
         RdProperty(RdType.BypassCSR)
     ),
 
-    new InstPattern(ECALL, ECallProperty(true.B)),
-    new InstPattern(EBREAK, EBreakProperty(true.B)),
+    new InstPattern(ECALL, ECallProperty(EcallIE.EN)),
+    new InstPattern(EBREAK, EBreakProperty(EbreakIE.EN)),
 
     new InstPattern(SRET, RetCompProperty(PcType.SRet)
-    ++ SRetProperty(true.B)),
+      ++ SRetProperty(true.B)),
     new InstPattern(MRET, RetCompProperty(PcType.MRet)
-    ++ MRetProperty(true.B)),
+      ++ MRetProperty(MRetIE.EN)),
 
     new InstPattern(FENCE,
       WriteRdProperty(false.B) ++
-        FenceProperty(true.B)
+        FenceProperty(FenceEnableIE.EN)
     ),
-    new InstPattern(FENCE_I, FlushICacheProperty(true.B)),
+    new InstPattern(FENCE_I, FlushICacheProperty(IcacheFlushIE.EN)),
     new InstPattern(SFENCE_VMA, FlushTLBProperty(true.B)),
-    new InstPattern(WFI, WFIProperty(true.B)),
+    new InstPattern(WFI, WFIProperty(WFIIE.EN)),
   )
 }
 
