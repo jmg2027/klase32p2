@@ -22,12 +22,12 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
     val addr = Input(UInt(k.addrWidth.W))
     val rddata = Output(UInt(k.dataWidth.W))
     val wrdata = Input(UInt(k.dataWidth.W))
-    }
+  }
   )
 
   // Request to DM
   io.edm.cmd := Mux1H(Seq(
-    io.lsuctrlIE.isLoad === LoadControl.EN -> M_XRD,
+    (io.lsuctrlIE.isLoad === LoadControl.EN) -> M_XRD,
     ((io.lsuctrlIE.isStore === StoreControl.EN) &&
       (io.lsuctrlIE.lsSize === DataSize.Word)) -> M_XWR,
     ((io.lsuctrlIE.isStore === StoreControl.EN) &&
@@ -48,9 +48,9 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   io.edm.st_wdata := io.wrdata
   io.edm.st_mask := Mux1H(
     Seq(
-      io.lsuctrlIE.lsSize === DataSize.Byte -> "b0001".U,
-      io.lsuctrlIE.lsSize === DataSize.HalfWord -> "b0011".U,
-      io.lsuctrlIE.lsSize === DataSize.Word -> "b1111".U,
+      (io.lsuctrlIE.lsSize === DataSize.Byte) -> "b0001".U,
+      (io.lsuctrlIE.lsSize === DataSize.HalfWord) -> "b0011".U,
+      (io.lsuctrlIE.lsSize === DataSize.Word) -> "b1111".U,
     )
   )
   io.edm.st_mmio := DontCare
@@ -60,13 +60,13 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   io.rddata := Mux1H(
     Seq(
       ((io.lsuctrlME.lsSize === DataSize.Byte) &&
-      (io.lsuctrlME.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 7, 0.U), io.edm.ld_rdata(7, 0)),
+        (io.lsuctrlME.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 7, 0.U), io.edm.ld_rdata(7, 0)),
       ((io.lsuctrlME.lsSize === DataSize.Byte) &&
-        (io.lsuctrlME.isSigned === SignedControl.unsigned)) -> io.edm.ld_rdata(7, 0).zext,
+        (io.lsuctrlME.isSigned === SignedControl.unsigned)) -> io.edm.ld_rdata(7, 0).zext.asUInt,
       ((io.lsuctrlME.lsSize === DataSize.HalfWord) &&
         (io.lsuctrlME.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 15, 0.U), io.edm.ld_rdata(15, 0)),
       ((io.lsuctrlME.lsSize === DataSize.HalfWord) &&
-        (io.lsuctrlME.isSigned === SignedControl.unsigned)) -> io.edm.ld_rdata(15, 0).zext,
+        (io.lsuctrlME.isSigned === SignedControl.unsigned)) -> io.edm.ld_rdata(15, 0).zext.asUInt,
       (io.lsuctrlME.lsSize === DataSize.Word) -> io.edm.ld_rdata,
     )
   )
