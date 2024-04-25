@@ -12,12 +12,12 @@ import freechips.rocketchip.rocket.Causes
 class KlasE32IO(implicit p: Parameters) extends Bundle with KlasE32IOEtc {
   val k = p(KlasE32ParamKey)
 
-  val acc = new Acc.Interface
+//  val acc = new Acc.Interface
   val interrupt = Input(new Interrupt)
   val edm = new EdmIntf
   val epm = new EpmIntf
-  val jtag = new JtagIntf
-  val dbg = new DbgIntf
+//  val jtag = new JtagIntf
+//  val dbg = new DbgIntf
 }
 
 trait KlasE32IOEtc extends Bundle {
@@ -26,10 +26,13 @@ trait KlasE32IOEtc extends Bundle {
 }
 
 class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
-with HasCoreParameters {
+  with HasCoreParameters {
   val NOP = BitPat("b00000000000000000000000000010011")
 
   val io = IO(new KlasE32IO)
+
+  // FIXME: WFI
+  io.powerdown := DontCare
 
   // Module definition
   val alu = Module(new ALU)
@@ -45,14 +48,11 @@ with HasCoreParameters {
   val reg = Module(new RegisterFile())
 
 
-  // PC Register
-  val bootAddrWire = WireInit(bootAddrParam.U)
-  if (usingOuterBoodAddr) { val bootAddrWire = io.epm.bootAddr}
-  val pcReg = RegEnable(frontend.io.pcRegWrite.bits, bootAddrWire, frontend.io.pcRegWrite.valid && !stallSig.proc)
-  
-  
+  // control signal
+  val ctrlSig = dec.io.decSig
+
   // Stall
-  val stallSig = new Stall
+  val stallSig = WireInit(new Stall, DontCare)
   // FIXME: LSQ
   when (io.edm.ld_req) {
     stallSig.me.load := !io.edm.ld_ack
@@ -61,14 +61,20 @@ with HasCoreParameters {
     stallSig.ie.store := !io.edm.st_ack
   }
   stallSig.me.hzd := hzd.io.stall
-  stallSig.me.fence := ctrlSig.fence && (io.edm.ld_ack || io.edm.st_ack)
+  stallSig.me.fence := ctrlSig.fence.asUInt.orR && (io.edm.ld_ack || io.edm.st_ack)
   val stallIE = stallSig.ie.asUInt.orR
   val stallME = stallSig.me.asUInt.orR
   val stall = stallIE && stallME
 
 
+  // PC Register
+  val bootAddrWire = WireInit(bootAddrParam.U)
+  if (usingOuterBoodAddr) { val bootAddrWire = io.epm.bootAddr}
+  val pcReg = RegEnable(frontend.io.pcRegWrite.bits, bootAddrWire, frontend.io.pcRegWrite.valid && !stall)
+
+
   // Pipeline
-  val ie_inst = RegEnable(frontend.io.inst.bits, bitPatToUInt(NOP), frontend.io.inst.valid && !stall)
+  val ie_inst = RegEnable(frontend.io.instPacket.bits.inst, bitPatToUInt(NOP), frontend.io.instPacket.valid && !stall)
   val ie_pc = RegEnable(pcReg, frontend.io.issue && !stall)
 
   val me_inst = RegEnable(ie_inst, bitPatToUInt(NOP), !stallME)
@@ -77,28 +83,58 @@ with HasCoreParameters {
   val me_rdaddr = RegEnable(ctrlSig.rd, !stallME)
 
 
+  // Exception
+  val (ieXcpt, ieCause) = checkExceptions(List(
+//    (csr.io.interruptPending, csr.io.interruptCause),
+    (frontend.io.instPacket.bits.xcpt.ma, Causes.misaligned_fetch.U),
+    (frontend.io.instPacket.bits.xcpt.pf, Causes.fetch_page_fault.U),
+    (frontend.io.instPacket.bits.xcpt.gf, Causes.fetch_guest_page_fault.U),
+    (frontend.io.instPacket.bits.xcpt.ae, Causes.fetch_access.U),
+
+    (io.edm.st_ack && io.edm.xcpt.ma, Causes.misaligned_store.U),
+    (io.edm.st_ack && io.edm.xcpt.pf, Causes.store_page_fault.U),
+    (io.edm.st_ack && io.edm.xcpt.gf, Causes.store_guest_page_fault.U),
+    (io.edm.st_ack && io.edm.xcpt.ae, Causes.store_access.U),
+    (ctrlSig.illegal === IllegalInstIE.EN, Causes.illegal_instruction.U),
+    (ctrlSig.ecall === EcallIE.EN, Causes.machine_ecall.U),
+    (ctrlSig.ebreak === EbreakIE.EN, Causes.breakpoint.U),
+  ))
+
+  // Exception pipeline
+  val ieXcptReg = RegEnable(ieXcpt, !stall)
+  val ieCauseReg = RegEnable(ieCause, !stall)
+
+  val (meXcpt, meCause) = checkExceptions(List(
+    (ieXcptReg, ieCauseReg),
+    (io.edm.ld_ack && io.edm.xcpt.ma, Causes.misaligned_load.U),
+    (io.edm.ld_ack && io.edm.xcpt.pf, Causes.load_page_fault.U),
+    (io.edm.ld_ack && io.edm.xcpt.gf, Causes.load_guest_page_fault.U),
+    (io.edm.ld_ack && io.edm.xcpt.ae, Causes.load_access.U),
+  ))
+
+
+  csr.io.exception := meXcpt
+  csr.io.cause := meCause
+
   // Fetch & Issue
   io.epm <> frontend.io.epm
+  io.epm.kill := DontCare
+
 
   // ctrl
   frontend.io.ctrl := ctrlSig.pcCtrl
-  frontend.io.fence := ctrlSig.fence
   frontend.io.flushEn := ctrlSig.flushICache
-
-  frontend.io.ocdExe := DontCare
-  frontend.io.ocdInst := DontCare
-  frontend.io.ocdReq := DontCare
 
   frontend.io.divBusy := DontCare
 
   frontend.io.if_pc := pcReg
-  frontend.io.evec := csr.out.mtvec
+  frontend.io.evec := csr.io.out.mtvec.asUInt
   frontend.io.cnd := alu.io.F
-  frontend.io.xcpt := meXcpt
-  frontend.io.eret := ctrlSig.ecall || ctrlSig.ebreak || ctrlSig.mret
-  
-  frontend.io.dmAck := io.edm.ld_ack || io.edm.st_ack
-  frontend.io.hzdStall := stallSig.hzd
+  frontend.io.exception := meXcpt
+  frontend.io.eret := ctrlSig.ecall.asUInt.orR || ctrlSig.ebreak.asUInt.orR || ctrlSig.mret.asUInt.orR
+
+//  frontend.io.dmAck := io.edm.ld_ack || io.edm.st_ack
+  frontend.io.stall := stall
 
   frontend.io.aluR := alu.io.R
 
@@ -106,8 +142,24 @@ with HasCoreParameters {
   // Decode
   dec.io.inst := ie_inst
 
-  // control signal
-  val ctrlSig = dec.io.decSig.bits
+
+  // Register file
+  reg.io.rp(0).addr := ctrlSig.rs1
+  reg.io.rp(1).addr := ctrlSig.rs2
+  val rs1 = reg.io.rp(0).data
+  val rs2 = reg.io.rp(1).data
+
+  reg.io.wp(0).bits.addr := ctrlSig.rd
+  reg.io.wp(1).bits.addr := ctrlSig.rd
+  reg.io.wp(0).valid := ctrlSig.w1Wb.asUInt.orR && !stall
+  reg.io.wp(1).valid := me_isLoad.asUInt.orR && !stallME
+
+  reg.io.wp(0).bits.data := Mux1H(Seq(
+    RdType.Alu -> alu.io.R,
+    RdType.ConsecPC -> (pcReg + 4.U),
+    RdType.BypassCSR -> csr.io.rd
+  ).map {case(k, v) => (k === ctrlSig.rdType, v)})
+  reg.io.wp(1).bits.data := lsu.io.rddata
 
 
   // ALU
@@ -127,23 +179,6 @@ with HasCoreParameters {
   ).map { case (k, v) => (k === ctrlSig.operandSelect.a, v) })
 
 
-  // Register file
-  reg.io.rp(0).addr := ctrlSig.rs1
-  reg.io.rp(1).addr := ctrlSig.rs2
-  val rs1 = reg.io.rp(0).data
-  val rs2 = reg.io.rp(1).data
-
-  reg.io.wp(0).bits.addr := ctrlSig.rd
-  reg.io.wp(1).bits.addr := ctrlSig.rd
-  reg.io.wp(0).valid := ctrlSig.w1Wb.asUInt.asBool && !stal
-  reg.io.wp(1).valid := me_isLoad.asUInt.asBool && !stallSig.proc
-
-  reg.io.wp(0).bits.data := Mux1H(Seq(
-    RdType.Alu -> alu.io.R,
-    RdType.ConsecPC -> (pcReg + 4.U),
-    RdType.BypassCSR -> csr.io.rd
-  ).map {case(k, v) => (k === ctrlSig.rdType, v)})
-  reg.io.wp(1).bits.data := lsu.io.rddata
 
 
   // CSR
@@ -151,39 +186,19 @@ with HasCoreParameters {
   csr.io.ctrl.in := alu.io.R
   csr.io.ctrl.addr := ie_inst(31, 20)
 
+  csr.io.hartId := hartId.U
+  csr.io.ecall := ctrlSig.ecall
+  csr.io.ebreak := ctrlSig.ebreak
+  csr.io.wfi := ctrlSig.wfi
+
   // interrupt
   csr.io.interrupt := io.interrupt
-  csr.io.br := frontend.io.br
 
-  // Exception
-  val (ieXcpt, ieCause) = checkExceptions(List(
-    (csr.io.interrupt, csr.io.interruptCause)
-    // (io.edm.xcpt.loc, ),
-    (io.edm.xcpt.ma, Causes.misaligned_fetch.U),
-    (io.edm.xcpt.pf, Causes.fetch_page_fault.U),
-    (io.edm.xcpt.gf, Causes.fetch_guest_page_fault.U),
-    (io.edm.xcpt.ae, Causes.fetch_access.U),
-    // (io.epm.xcpt.loc, ),
-    (io.epm.st_req && io.epm.xcpt.ma, Causes.misaligned_store.U),
-    (io.epm.st_req && io.epm.xcpt.pf, Causes.store_page_fault.U),
-    (io.epm.st_req && io.epm.xcpt.gf, Causes.store_guest_page_fault.U),
-    (io.epm.st_req && io.epm.xcpt.ae, Causes.store_access.U),
-    (ctrlSig.illegal === IllegalInstIE.EN, Causes.illegal_instruction.U),
-    (ctrlSig.ecall === EcallIE.EN, Causes.machine_ecall.U),
-    (ctrlSig.ebreak === EbreakIE.EN, Causes.breakpoint.U),
-  ))
-
-  val (meXcpt, meCause) = checkExceptions(List(
-    (io.epm.ld_req && io.epm.xcpt.ma, Causes.misaligned_load.U),
-    (io.epm.ld_req && io.epm.xcpt.pf, Causes.load_page_fault.U),
-    (io.epm.ld_req && io.epm.xcpt.gf, Causes.load_guest_page_fault.U),
-    (io.epm.ld_req && io.epm.xcpt.ae, Causes.load_access.U),
-  ))
 
   // Hazard
   hzd.io.rs1Valid := ctrlSig.operandSelect.a === OperandType.Reg
   hzd.io.rs2Valid := ctrlSig.operandSelect.b === OperandType.Reg
-  hzd.io.loadValid := me_isLoad
+  hzd.io.loadValid := me_isLoad === LoadControl.EN
 
   hzd.io.rs1Addr := ctrlSig.rs1
   hzd.io.rs2Addr := ctrlSig.rs2
