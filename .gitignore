@@ -339,3 +339,143 @@ project/plugins/project/
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 
+.scalafmt.conf
+.bloop/bloop.settings.json
+.bloop/cde-test.json
+.bloop/cde.json
+.bloop/rocket_chip-test.json
+.bloop/rocket_chip.json
+.bloop/rocket_macros-test.json
+.bloop/rocket_macros.json
+.bloop/root-test.json
+.bloop/root.json
+.bloop/ucb_hardfloat-test.json
+.bloop/ucb_hardfloat.json
+.bloop/cde/cde-analysis.bin
+.bloop/cde/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-gp9p49rdSfizzk8ew7Zf6w==/META-INF/semanticdb/generators/rocket-chip/cde/cde/src/chipsalliance/rocketchip/config.scala.semanticdb
+.bloop/rocket_macros/rocket_macros-analysis.bin
+.bloop/rocket_macros/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-kOjEgv4KRsSV521HNIawfQ==/META-INF/semanticdb/generators/rocket-chip/macros/src/main/scala/ValName.scala.semanticdb
+.bloop/ucb_hardfloat/ucb_hardfloat-analysis.bin
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/AddRecFN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/classifyRecFN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/common.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/CompareRecFN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/DivSqrtRecF64_mulAddZ31.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/DivSqrtRecF64.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/DivSqrtRecFN_small.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/fNFromRecFN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/INToRecFN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/MulAddRecFN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/MulRecFN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/primitives.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/rawFloatFromFN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/rawFloatFromIN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/rawFloatFromRecFN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/recFNFromFN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/RecFNToIN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/RecFNToRecFN.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/resizeRawFloat.scala.semanticdb
+.bloop/ucb_hardfloat/bloop-internal-classes/classes-Metals-gL1xyu3NRLWG-voPfEd9ow==-8knyID2eSl-ZBezWJ5PAvA==/META-INF/semanticdb/generators/rocket-chip/hardfloat/hardfloat/src/main/scala/RoundAnyRawFNToRecFN.scala.semanticdb
+.metals/metals.lock.db
+.metals/metals.mv.db
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-474.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-475.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-476.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-478.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-479.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-480.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-481.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-482.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-483.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-484.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-485.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-486.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-487.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-488.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-489.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-490.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-491.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-492.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-493.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-494.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-495.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-496.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-497.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-498.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-499.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-500.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-501.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-502.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-503.md
+.metals/.reports/bloop/2024-04-25/r_IO error while decod..._08-50-08-504.md
+.metals/.reports/metals/2024-04-24/r_scala-toplevel-mtags_(rocketchip)_23-45-23-646.md
+.metals/.reports/metals/2024-04-24/r_scala-toplevel-mtags_23-45-14-482.md
+.metals/.reports/metals/2024-04-24/r_scala-toplevel-mtags_23-45-14-484.md
+.metals/.reports/metals/2024-04-25/r_invalid-symbol_01-18-57-210.md
+.metals/.reports/metals/2024-04-25/r_invalid-symbol_01-18-57-212.md
+.metals/.reports/metals/2024-04-25/r_invalid-symbol_01-18-57-213.md
+.metals/.reports/metals/2024-04-25/r_invalid-symbol_01-45-41-617.md
+.metals/.reports/metals/2024-04-25/r_invalid-symbol_01-45-41-619.md
+.metals/.reports/metals/2024-04-25/r_invalid-symbol_01-45-41-621.md
+.metals/.reports/metals/2024-04-25/r_invalid-symbol_01-50-20-167.md
+.metals/.reports/metals/2024-04-25/r_invalid-symbol_01-50-20-170.md
+.metals/.reports/metals/2024-04-25/r_invalid-symbol_01-50-20-171.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_(cde)_01-43-13-337.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_(klase32p2-build-build)_01-47-11-677.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_(klase32p2-build-build)_01-47-11-678.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_(klase32p2-build-build)_08-52-22-026.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_(klase32p2-build-build)_08-52-22-027.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_(rocket_chip)_01-43-12-868.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_(rocket_chip)_01-47-09-947.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_(root-test)_01-47-11-293.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_(root)_08-52-21-117.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_01-47-03-365.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_01-47-03-471.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_01-47-03-472.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_08-52-12-294.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_08-52-12-422.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_08-52-12-423.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_08-53-52-140.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_08-53-52-247.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_08-53-52-248.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_22-54-07-421.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_22-54-07-537.md
+.metals/.reports/metals/2024-04-25/r_scala-toplevel-mtags_22-54-07-539.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-11-18-893.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-11-19-577.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-11-27-735.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-11-37-740.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-11-56-796.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-11-59-278.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-13-58-365.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-14-15-407.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-14-33-487.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-14-34-451.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-14-35-182.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-14-58-545.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_01-37-17-989.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-02-38-510.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-02-43-013.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-02-56-372.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-02-57-587.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-02-58-240.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-02-58-884.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-02-59-468.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-03-00-022.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-03-09-514.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-03-12-946.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-03-13-700.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-03-14-564.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(klase32p2-build)_02-03-23-583.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(root)_05-15-56-712.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(root)_05-55-29-015.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(root)_06-16-01-982.md
+.metals/.reports/metals-full/2024-04-25/r_compiler-error_(root)_06-26-34-206.md
+.vscode/settings.json
+project/metals.sbt
+project/.bloop/bloop.settings.json
+project/.bloop/klase32p2-build.json
+project/project/metals.sbt
+project/project/.bloop/bloop.settings.json
+project/project/.bloop/klase32p2-build-build.json
+project/project/project/metals.sbt
