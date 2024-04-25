@@ -12,31 +12,25 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
   val if_pc = Input(UInt(mxLen.W)) // Current PC
   // val ie_pc = Input(UInt(mxLen.W)) // 1 cycle before PC
   val evec = Input(UInt(mxLen.W))
-  val br = Output(Bool()) // FIX THIS
   val cnd = Input(Bool())
-  val xcpt = Input(Bool())
+  val exception = Input(Bool())
   val eret = Input(Bool())
 
   val divBusy = Input(Bool())
-  val hzdStall = Input(Bool())
-
-  val ocdExe = Input(Bool())
-  val ocdInst = Input(UInt(wordsize.W))
-  val ocdReq = Input(Bool())
-  val ocdAck = Output(Bool())
+  val stall = Input(Bool())
 
   val aluR = Input(UInt(mxLen.W))
-
-  val waitDmReq = Input(Bool())
-  val waitPmPf = Input(Bool())
 
   val issue = Output(Bool())
 
   val pcRegWrite = Output(Valid(UInt(mxLen.W))) // Next PC
 
-  val inst = Output(Valid(UInt(wordsize.W))) // IF stage
+  val instPacket = Output(Valid(new Bundle {
+    val inst = UInt(wordsize.W)
+    val xcpt = new HeartXcpt
+  })) // IF stage
 
-  val flushEn = Input(Bool())
+  val flushEn = Input(IcacheFlushIE())
 
   val epm = new EpmIntf
 }
@@ -48,15 +42,16 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   val io = IO(new FrontendIO())
 
-  io.br := (io.ctrl === BR)
-  val brCond = io.br & io.cnd
+  io.epm.kill := DontCare
+
+  val brCond = (io.ctrl === BR) & io.cnd
   val haltCond = (io.ctrl === HALT)
   val jalCond = (io.ctrl === JAL)
   val jalrCond = (io.ctrl === JALR) | (io.ctrl === MRET)
 
   val bootingUpdate = Wire(Bool())
   val booting = Wire(Bool())
-  val regBooting = RegEnable(booting && !io.procStall, 1.B, bootingUpdate)
+  val regBooting = RegEnable(booting && !io.stall, 1.B, bootingUpdate)
 
   bootingUpdate := false.B
   booting := false.B
@@ -64,37 +59,41 @@ class Frontend(implicit p: Parameters) extends CoreModule {
     booting := true.B
     bootingUpdate := false.B
   }
+  // Fetch Queue
+  // FIXME: Support for C extension
+  // For now 32-bit N entries
+  // To extend to compressed mode, fetch queue should handle 16-bit data
+  // when empty, enq data will be dequeued instantly
+  val fq = Module(new Queue(new FetchQueueIntf, fetchqueueEntries, flow = true, hasFlush = true))
+  fq.io.enq.bits.data := io.epm.data
+  fq.io.enq.bits.xcpt := io.epm.xcpt
+  fq.io.enq.valid := io.epm.ack // Suppose simultaneous ack and data response
 
-  val io.ocdAck = debugmode || regDebugmode || regDebugack || !instrAvail
-  val regDebugack = RegEnable(!io.procStall, io.ocdAck)
-
-  val debugmode = io.ocdReq && (issueable || regDebugmode)
-  val regDebugmode = RegEnable(!io.procStall, debugmode)
+  // Why this generates nullpointerexception?
+//  def isRVC(inst: UInt): Bool = !(inst(1) && inst(0))
 
   // Issue
-  val issueable = !io.hzdStall && !io.divBusy
-  // FIXME: RVC
-  // val instrAvail = fq.io.deq.valid && (!io.pmPartial || isRVC(instIF)) && !regBooting
+  val issueable = !io.stall && !io.divBusy
+  /* FIXME: RVC
+  Fetch queue will fetch fetchwidth. fetchqueue should store 2 bytes align
+  Extended instruction will be issued: 32 bits
+   */
   val instrAvail = fq.io.deq.valid && !regBooting
   // When fq being flushed, NOP is issued(1 cycle stall)
-  val issue = instrAvail && issueable && !(debugmode || regDebugmode)
-  // val issue = instrAvail && !brCond && issueable && !(debugmode || regDebugmode)
-  io.inst.bits := Mux(io.ocdExe, io.ocdInst, Mux(issue, instIF, 0.U))
-  io.inst.valid := io.ocdExe || issue
-  io.issue := issue
+  val issue = instrAvail && issueable
+
+  val instIF = fq.io.deq.bits.data
+  val xcptIF = fq.io.deq.bits.xcpt
 
   // Next PC
-  val leaveDebugmode = !debugmode && regDebugmode
-  val brIE = brCond && !io.hzdStall
-  val jalIE = jalCond && !io.hzdStall & !brIE
-  val jalrIE = jalrCond && !io.hzdStall
-  val jump = brIE || jalIE || jalrIE || regBooting || leaveDebugmode
+  val brIE = brCond && !io.stall
+  val jalIE = jalCond && !io.stall
+  val jalrIE = jalrCond && !io.stall
+  val jump = brIE || jalIE || jalrIE || regBooting
 
   val jumpPC = Mux(brIE || jalIE || jalrIE, io.aluR, io.if_pc)
 
-  val pcWrite = Mux(jump, jumpPC, io.if_pc + Mux(fq.io.deq.bits.rvc, 2.U, 4.U))
-
-
+  val pcWrite = Mux(jump, jumpPC, io.if_pc + Mux(!(instIF(1) && instIF(0)), 2.U, 4.U))
 
   when(jump || issue) {
     io.pcRegWrite.valid := true.B
@@ -104,50 +103,42 @@ class Frontend(implicit p: Parameters) extends CoreModule {
     io.pcRegWrite.bits := 0.U
   }
 
-  // Fetch Queue
-  // FIXME: Support for C extension
-  // For now 32-bit N entries
-  // To extend to compressed mode, fetch queue should handle 16-bit data
-  // when empty, enq data will be dequeued instantly
-  val fq = Module(new Queue(new FetchQueueIntf, fetchqueueEntries, flow = true, hasFlush = true))
-  fq.io.enq.bits.data := io.epm.data
-  fq.io.enq.bits.xcpt := io.epm.xcpt
-  fq.io.enq.bits.rvc := isRVC(io.epm.data)
-  fq.io.enq.valid := io.epm.ack // Suppose simultaneous ack and data response
-
-  val instIF = fq.io.deq.bits.data
-  val xcptIF = fq.io.deq.bits.xcpt
-  fq.io.deq.ready := issue // issue signal will block when stalled
-
-  // needs flush conditions more such as exception, interrupt, mret, replay
-  val fetch = !debugmode || fq.io.enq.ready
-
-  io.epm.addr := Mux(fetch, fetchPC, 0.U)
-  io.epm.req := fetch
-  io.epm.flush := io.flushEn
-  io.epm.cmd := 0.U // int load
-  // io.pmJump := jump
-  // io.pmTarget := jumpPC
-
   // Fetch PC
-  def isRVC(inst: UInt): Bool = inst(1, 0) !== 3.U
-  val issueLength = Mux(isRVC(io.epm.data), 2.U, 4.U)
 
-  val bootAddrWire = WireInit(bootAddrParam.U)
+  val issueLength = Mux((!(io.epm.data(0) && io.epm.data(1))), 2.U, 4.U)
+  val fetch = fq.io.enq.ready
+
+  val bootAddrWire = WireDefault(bootAddrParam.U)
   if (usingOuterBoodAddr) {
     val bootAddrWire = io.epm.bootAddr
   }
-  val fetchPC = RegInit(bootAddrWire, UInt(mxLen.W))
-  when (jump) {
+//  val fetchPC = RegInit(bootAddrWire.asUInt, UInt(mxLen.W))
+  val fetchPC = Reg(UInt(mxLen.W))
+  when (reset.asBool) {
+    fetchPC := bootAddrWire
+    fq.flush := true.B
+  }.elsewhen (jump) {
     fetchPC := jumpPC
     fq.flush := true.B
-  } elsewhen (io.xcpt || io.eret) {
+  }.elsewhen (io.exception || io.eret) {
     fetchPC := io.evec
     fq.flush := true.B
-  } otherwise {
+  }.otherwise {
     fetchPC := fetchPC + issueLength
+    fq.flush := false.B
   }
 
+  io.epm.addr := Mux(fetch, fetchPC, 0.U)
+  io.epm.req := fetch
+  io.epm.flush := io.flushEn.asUInt.orR
+  io.epm.cmd := 0.U // int load
 
-  // FIXME: Extend to compressed mode
+  // Issue
+  fq.io.deq.ready := issue // issue signal will block when stalled
+  io.instPacket.bits.inst := Mux(issue, instIF, 0.U)
+  io.instPacket.bits.xcpt := Mux(issue, xcptIF, 0.U.asTypeOf(new HeartXcpt))
+  io.instPacket.valid := issue
+  io.issue := issue
+
+
 }
