@@ -64,14 +64,14 @@ object Interrupt {
 }
 
 class Stall extends Bundle {
-  val ie = (new Bundle){
-    val store = Bool()
-  }
-  val me = (new Bundle){
-    val load = Bool()
-    val hzd = Bool()
-    val fence = Bool()
-  }
+ val ie = new Bundle {
+  val store = Bool()
+ }
+ val me = new Bundle{
+  val load = Bool()
+  val hzd = Bool()
+  val fence = Bool()
+ }
 }
 
 class ExternalMemoryInterfaceReq(implicit p: Parameters) extends Bundle {
@@ -100,7 +100,9 @@ class HeartXcpt extends Bundle {
  val ae = Bool() // access exception
 }
 
-class EpmIntf(implicit p: Parameters) extends FetchQueueIntf {
+class EpmIntf(implicit p: Parameters) extends CoreBundle {
+ val k = p(KlasE32ParamKey)
+
  val cmd = Output(UInt(5.W))
  val req = Output(Bool())
  val addr = Output(UInt(k.addrWidth.W))
@@ -111,13 +113,16 @@ class EpmIntf(implicit p: Parameters) extends FetchQueueIntf {
 
  val kill = Output(Bool())
  val flush = Output(Bool())
+
+ val data = Input(UInt(k.fetchWidth.W))
+ val xcpt = Input(new HeartXcpt)
 }
 
 class FetchQueueIntf(implicit p: Parameters) extends CoreBundle {
  val k = p(KlasE32ParamKey)
 
- val data = Input(UInt(k.fetchWidth.W))
- val xcpt = Input(new HeartXcpt)
+ val data = UInt(k.fetchWidth.W)
+ val xcpt = new HeartXcpt
 }
 
 class EdmIntf(implicit p: Parameters) extends CoreBundle {
@@ -155,18 +160,18 @@ class EdmIntf(implicit p: Parameters) extends CoreBundle {
 
 
 class JtagIntf extends Bundle {
-  // JMG: Check
-  //val tck = Input(Bool())
-  val trst = Input(AsyncReset())
-  val tck = Input(Clock())
-  //val trst = Input(Reset())
-  val ireg = Input(UInt(16.W))
-  val si = Input(Bool())
-  val so = Output(Bool())
-  val capture_dr = Input(Bool())
-  val update_dr = Input(Bool())
-  val shift_dr = Input(Bool())
-  val update_ir = Input(Bool())
+ // JMG: Check
+ //val tck = Input(Bool())
+ val trst = Input(AsyncReset())
+ val tck = Input(Clock())
+ //val trst = Input(Reset())
+ val ireg = Input(UInt(16.W))
+ val si = Input(Bool())
+ val so = Output(Bool())
+ val capture_dr = Input(Bool())
+ val update_dr = Input(Bool())
+ val shift_dr = Input(Bool())
+ val update_ir = Input(Bool())
  /*
 
    } // leaving gated-clock domain
