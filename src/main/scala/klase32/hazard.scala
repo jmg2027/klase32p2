@@ -25,7 +25,7 @@ class Hazards(implicit p: Parameters) extends CoreModule {
     // val divWnc = Input(Bool())
 
     val stall = Output(Bool())
-    }
+  }
   )
 
   val RAWHWraw = Wire(Bool())
@@ -42,7 +42,7 @@ class Hazards(implicit p: Parameters) extends CoreModule {
   // RS2 === Load RD
   when(
     (io.loadValid && io.rs1Valid && (io.rs1Addr === io.rdAddr)) ||
-    (io.loadValid && io.rs2Valid && (io.rs2Addr === io.rdAddr)) ||
+      (io.loadValid && io.rs2Valid && (io.rs2Addr === io.rdAddr))
   ) {
     RAWHWraw := 1.U
   }.otherwise {
