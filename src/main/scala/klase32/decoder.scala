@@ -45,7 +45,7 @@ class Decoded(implicit p: Parameters) extends CoreBundle {
 
   val ecall = EcallIE()
   val ebreak = EbreakIE()
-  val mret = Bool()
+  val mret = MRetIE()
 
   val fence = FenceEnableIE()
   val flushICache = IcacheFlushIE()
@@ -57,11 +57,9 @@ class Decoded(implicit p: Parameters) extends CoreBundle {
 }
 
 class DecoderIO(implicit p: Parameters) extends CoreBundle {
-    val inst = Input(UInt(mxLen.W))
+  val inst = Input(UInt(mxLen.W))
 
-    val decSig = Flipped(Valid(new Decoded()))
-
-  val stall = Input(new Stall())
+  val decSig = Output(new Decoded())
 }
 
 class Decoder(implicit p: Parameters) extends CoreModule {
@@ -69,8 +67,7 @@ class Decoder(implicit p: Parameters) extends CoreModule {
 
   val io = IO(new DecoderIO)
 
-  val d = io.decSig.bits
-  io.decSig.valid := 1.U
+  val d = io.decSig
 
   val decodeMapping = Seq(
     IllegalField -> d.illegal,
@@ -86,7 +83,7 @@ class Decoder(implicit p: Parameters) extends CoreModule {
     W1WritebackField -> d.w1Wb,
     W2WritebackField -> d.w2Wb,
 
-    NextPcField -> d.pcCtrl,
+    CtrlControlIEField -> d.pcCtrl,
 
     LsSizeField -> d.lsuCtrl.lsSize,
     StoreField -> d.lsuCtrl.isStore,
@@ -105,10 +102,12 @@ class Decoder(implicit p: Parameters) extends CoreModule {
     // MPYMDField -> d.mpyCtrl,
   )
 
+  d.useRD := DontCare
+
   val instTable =
     RV32IDecode.table ++
-    // RV32CDecode.table ++
-    RV32MDecode.table
+      // RV32CDecode.table ++
+      RV32MDecode.table
 
   val decodeTable = new DecodeTable(instTable, decodeMapping.unzip._1)
   val decodedInst = decodeTable.decode(io.inst)
