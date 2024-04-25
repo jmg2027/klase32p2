@@ -38,17 +38,18 @@ object param {
                                fetchqueueEntries: Int = 4,
 
                                causeWidth: Int = 4,
+                               hartIDWidth: Int = 4,
 
-                            )
+                             )
   case class KlasE32Param(
-                          addrWidth: Int = 32,
-                          dataWidth: Int = 32,
-                          fetchWidth: Int = 32,
-                          accdataWidth: Int = 32,
-                          accidWidth: Int = 32,
-                          tbminterfacenum: Int = 4,
-                          core: KlasE32CoreParam = KlasE32CoreParam(),
-                        ) {
+                           addrWidth: Int = 32,
+                           dataWidth: Int = 32,
+                           fetchWidth: Int = 32,
+                           accdataWidth: Int = 32,
+                           accidWidth: Int = 32,
+                           tbminterfacenum: Int = 4,
+                           core: KlasE32CoreParam = KlasE32CoreParam(),
+                         ) {
     def dataAlign = log2Ceil(dataWidth/8)
   }
 
@@ -90,6 +91,7 @@ trait HasCoreParameters {
   def csrWidthU = coreParams.uxLen
 
   def causeWidth = coreParams.causeWidth
+  def hartIDWidth = coreParams.hartIDWidth
 }
 
 abstract class CoreModule(implicit val p: Parameters) extends Module with HasCoreParameters
