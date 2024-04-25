@@ -9,7 +9,9 @@ import snitch.enums.SnitchEnum
 
 trait ControlEnum extends SnitchEnum
 trait ControlDefaultEnum extends ControlEnum { val default = Value }	// zero default result
-trait ControlDefaultEnableEnum extends ControlDefaultEnum { val EN = Value }	// default with enable only
+trait ControlDefaultEnableEnum extends ControlDefaultEnum {
+  val EN = Value
+}	// default with enable only
 
 class ALUControlIE {
   // does this work?
@@ -21,7 +23,7 @@ object ALUControlIE extends ControlDefaultEnum {
   val OR = Value
   val EQ = Value
   val XOR = Value
-  def NE = Value
+  val NE = Value
   val SRL = Value
   val SLL = Value
   val LT = Value	// 8
@@ -170,6 +172,8 @@ object RestoreMstatusIE extends ControlDefaultEnableEnum
 object EcallIE extends ControlDefaultEnableEnum
 
 object EbreakIE extends ControlDefaultEnableEnum
+
+object MRetIE extends ControlDefaultEnableEnum
 
 object MpyMDMuxIE extends ControlDefaultEnum {
   // default: MULHU(unsigned a, unsigned b)
