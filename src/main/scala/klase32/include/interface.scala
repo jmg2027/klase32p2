@@ -65,8 +65,8 @@ object Interrupt {
 
 class Stall extends Bundle {
  val ie = new Bundle {
-  val issue = Bool()
   val store = Bool()
+  val csr = Bool()
  }
  val me = new Bundle{
   val load = Bool()
