@@ -35,17 +35,17 @@ object CSR {
     def reg = RegInit(default.asTypeOf(field))
   }
 
-//  class MStatus(implicit p: Parameters) extends CSRRegBundle {
+  //  class MStatus(implicit p: Parameters) extends CSRRegBundle {
   class MStatus (implicit p: Parameters){
     val field = new Bundle{
-//      val sd = Bool()
-//      val zero4 = UInt(23.W)
-//      val mpv = Bool()
-//      val gva = Bool()
-//      val mbe = Bool()
-//      val sbe = Bool()
-//      val sxl = UInt(2.W)
-//      val uxl = UInt(2.W) // uppers are for rv64
+      //      val sd = Bool()
+      //      val zero4 = UInt(23.W)
+      //      val mpv = Bool()
+      //      val gva = Bool()
+      //      val mbe = Bool()
+      //      val sbe = Bool()
+      //      val sxl = UInt(2.W)
+      //      val uxl = UInt(2.W) // uppers are for rv64
       val sd_rv32 = Bool()
       val zero3 = UInt(8.W)
       val tsr = Bool()
@@ -157,8 +157,10 @@ object CSR {
   }
 
   class TVec(implicit p: Parameters) {
+    val k = p(KlasE32ParamKey)
+
     val field = new Bundle {
-      val base = UInt((mxLen-2).W)
+      val base = UInt((k.core.mxLen-2).W)
       val mode = UInt(2.W)
     }
 
@@ -264,17 +266,18 @@ class CSRIntfIO(implicit p: Parameters)
 
   val interrupt = Input(new Interrupt)
 
-//  val interruptPending = Output(Bool())
-//  val interruptCause = Output(UInt(4.W))
+  val interruptPending = Output(Bool())
+  val interruptCause = Output(UInt(4.W))
 
   val hartId = Input(UInt(hartIDWidth.W))
 
   val ecall = Input(EcallIE())
   val ebreak = Input(EbreakIE())
-  val mret = Input(MretIE())
+  val mret = Input(MRetIE())
   val wfi = Input(WFIIE())
-  
+
   val wfiOut = Output(Bool())
+  val csrWrite = Output(Bool())
 }
 
 class CSRModule(implicit p: Parameters) extends CoreModule {
@@ -316,7 +319,7 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
 
   val csrAddr = csrMap map {case (k, v) => k -> (io.ctrl.addr === k.U)}
 
-    io.rd := Mux1H(for ((k, v) <- csrMap) yield (csrAddr(k) -> v.asUInt))
+  io.rd := Mux1H(for ((k, v) <- csrMap) yield (csrAddr(k) -> v.asUInt))
 
   val wen = (io.ctrl.inst === RW) && (io.ctrl.inst === RS) && (io.ctrl.inst === RC)
   val wdata = Mux1H(Seq(
@@ -326,70 +329,95 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
   ))
 
   when (wen) {
-    when (csrAddr(CSRAddr.mstatus)) {csr.mstatus.reg := wdata.asTypeOf((new MStatus).field)}
-    when (csrAddr(CSRAddr.mstatush)) {csr.mstatush.reg := wdata.asTypeOf((new MStatush).field)}
+    when(csrAddr(CSRAddr.mstatus)) {
+      csr.mstatus.reg := wdata.asTypeOf((new MStatus).field)
+    }
+    when(csrAddr(CSRAddr.mstatush)) {
+      csr.mstatush.reg := wdata.asTypeOf((new MStatush).field)
+    }
     // when (csrAddr(CSRAddr.misa)) {}
-    when (csrAddr(CSRAddr.medeleg)) {csr.medeleg.reg := wdata}
-    when (csrAddr(CSRAddr.mideleg)) {csr.mideleg.reg := wdata}
-    when (csrAddr(CSRAddr.mie)) {csr.mie.reg := wdata.asTypeOf((new MIE).field)}
-    when (csrAddr(CSRAddr.mtvec)) {csr.mtvec.reg := wdata.asTypeOf((new TVec).field)}
+    when(csrAddr(CSRAddr.medeleg)) {
+      csr.medeleg.reg := wdata
+    }
+    when(csrAddr(CSRAddr.mideleg)) {
+      csr.mideleg.reg := wdata
+    }
+    when(csrAddr(CSRAddr.mie)) {
+      csr.mie.reg := wdata.asTypeOf((new MIE).field)
+    }
+    when(csrAddr(CSRAddr.mtvec)) {
+      csr.mtvec.reg := wdata.asTypeOf((new TVec).field)
+    }
     // when (csrAddr(CSRAddr.mvendorid)) {}
     // when (csrAddr(CSRAddr.marchid)) {}
     // when (csrAddr(CSRAddr.mimpid)) {}
     // when (csrAddr(CSRAddr.mhartid)) {}
-    when (csrAddr(CSRAddr.mscratch)) {csr.mscratch.reg := wdata}
-    when (csrAddr(CSRAddr.mepc)) {csr.mepc.reg :=
-      (if (usingCompressed) Cat(wdata(mxLen-1, 1), 0.U(1.W)) else Cat(wdata(mxLen-1, 2), 0.U(2.W)))
+    when(csrAddr(CSRAddr.mscratch)) {
+      csr.mscratch.reg := wdata
+    }
+    when(csrAddr(CSRAddr.mepc)) {
+      csr.mepc.reg :=
+        (if (usingCompressed) Cat(wdata(mxLen - 1, 1), 0.U(1.W)) else Cat(wdata(mxLen - 1, 2), 0.U(2.W)))
     }
     // If not bigint wrapped, compile error for overflow occurs
-    when (csrAddr(CSRAddr.mcause)) {csr.mcause.reg := wdata & ((BigInt(1) << (mxLen-1)) | ((BigInt(1) << causeWidth) - 1)).U}
-    when (csrAddr(CSRAddr.mtval)) {csr.mtval.reg := wdata}
-    when (csrAddr(CSRAddr.mip)) {csr.mip.reg := wdata.asTypeOf((new MIP).field)}
+    when(csrAddr(CSRAddr.mcause)) {
+      csr.mcause.reg := wdata & ((BigInt(1) << (mxLen - 1)) | ((BigInt(1) << causeWidth) - 1)).U
+    }
+    when(csrAddr(CSRAddr.mtval)) {
+      csr.mtval.reg := wdata
+    }
+    when(csrAddr(CSRAddr.mip)) {
+      csr.mip.reg := wdata.asTypeOf((new MIP).field)
+    }
     // when (csrAddr(CSRAddr.mconfigptr)) {}
-    when (csrAddr(CSRAddr.menvcfg)) {
+    when(csrAddr(CSRAddr.menvcfg)) {
       // Support S-mode or satp.MODE is read-only zero then don't write
       csr.menvcfg.reg.fiom := wdata.asTypeOf((new Envcfg).field).fiom
     }
     // when (csrAddr(CSRAddr.menvcfgh)) {}
     // when (csrAddr(CSRAddr.mseccfg)) {}
-
-    // Exception
-    val exception = io.ecall.asUInt.orR || io.ebreak.asUInt.orR || io.exception
-
-    io.evec = Mux(csr.mtvec.reg.mode === 0.U, csr.mtvec.reg.base, csr.mtvec.reg.base + (io.cause << 2))
-    val tval = Mux(io.ebreak.orR, io.epc, io.loadAddr)
-    when (exception) {
-      csr.mepc.reg := io.epc
-      csr.mcause.reg := io.cause
-      csr.mtval.reg := tval
-    }
-
-    when (io.mret) {
-      io.evec := csr.mepc.reg
-    }
-
-    // Interrupt
-//    val mip = WireDefault(csr.mip.reg)
-    val mip = WireInit(0.U.asTypeOf(csr.mip.reg))
-    mip.meip := io.interrupt.e
-    mip.mtip := io.interrupt.t
-    mip.msip := io.interrupt.s
-
-    val mInterruptPending = (csr.mie.reg.asUInt & mip.asUInt).orR
-//    io.interruptPending := mInterruptPending
-//    io.interruptCause := Mux1H (Seq(
-//      (csr.mip.reg.meip && csr.mie.reg.meip) -> 11.U,
-//      (csr.mip.reg.mtip && csr.mie.reg.mtip) -> 7.U,
-//      (csr.mip.reg.msip && csr.mie.reg.msip) -> 3.U,
-//    ))
   }
+
+  // Exception
+  val exception = io.ecall.asUInt.orR || io.ebreak.asUInt.orR || io.exception
+
+  io.evec := Mux(csr.mtvec.reg.mode === 0.U, csr.mtvec.reg.base, csr.mtvec.reg.base + (io.cause << 2))
+  val tval = Mux(io.ebreak.asUInt.orR, io.epc, io.loadAddr)
+  when (exception) {
+    csr.mepc.reg := io.epc
+    csr.mcause.reg := io.cause
+    csr.mtval.reg := tval
+  }
+
+  when (io.mret.asUInt.orR) {
+    io.evec := csr.mepc.reg
+  }
+
+  // Interrupt
+  val mip = WireInit(0.U.asTypeOf(csr.mip.reg))
+  mip.meip := io.interrupt.e
+  mip.mtip := io.interrupt.t
+  mip.msip := io.interrupt.s
+
+  val mInterruptPending = (csr.mie.reg.asUInt & mip.asUInt).orR
+      io.interruptPending := mInterruptPending
+      io.interruptCause := Mux1H (Seq(
+        (csr.mip.reg.meip && csr.mie.reg.meip) -> 11.U,
+        (csr.mip.reg.mtip && csr.mie.reg.mtip) -> 7.U,
+        (csr.mip.reg.msip && csr.mie.reg.msip) -> 3.U,
+      ))
+
 
   // WFI
   val wfi = RegInit(false.B)
-  when (io.wfi) {
+  when (io.wfi.asUInt.orR) {
     wfi := true.B
   }
   when (mInterruptPending) {
     wfi := false.B
   }
+  io.wfiOut := wfi
+
+  // CSR write results in stall and flush
+  io.csrWrite := wen
 }
