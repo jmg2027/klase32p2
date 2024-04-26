@@ -24,9 +24,10 @@ class RegisterFile(implicit p: Parameters) extends CoreModule with HasCoreParame
   val io = IO(new RegisterFileIO())
   val regFile = Mem(regNum, UInt(mxLen.W))
   // x0 is zero register
-  regFile(0) := 0.U
+//  regFile(0) := 0.U
 
   for (i <- 0 until readportNum) {
+    when (io.rp(i).addr === 0.U) { io.rp(1).data := 0.U}
     io.rp(i).data := regFile(io.rp(i).addr)
   }
 
