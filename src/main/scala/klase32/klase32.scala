@@ -12,12 +12,12 @@ import freechips.rocketchip.rocket.Causes
 class KlasE32IO(implicit p: Parameters) extends Bundle with KlasE32IOEtc {
   val k = p(KlasE32ParamKey)
 
-//  val acc = new Acc.Interface
+  //  val acc = new Acc.Interface
   val interrupt = Input(new Interrupt)
   val edm = new EdmIntf
   val epm = new EpmIntf
-//  val jtag = new JtagIntf
-//  val dbg = new DbgIntf
+  //  val jtag = new JtagIntf
+  //  val dbg = new DbgIntf
 }
 
 trait KlasE32IOEtc extends Bundle {
@@ -60,8 +60,8 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   when (io.edm.st_req) {
     stallSig.ie.store := !io.edm.st_ack
   }
-  stallSig.ie.issue := !frontennd.io.issue
-  stallSig.me.wfi := !csr.io.wfiOut
+  stallSig.ie.csr := csr.io.csrWrite
+  stallSig.me.wfi := csr.io.wfiOut
   stallSig.me.hzd := hzd.io.stall
   stallSig.me.fence := ctrlSig.fence.asUInt.orR && (io.edm.ld_ack || io.edm.st_ack)
   val stallIE = stallSig.ie.asUInt.orR
@@ -76,7 +76,7 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
 
   // Pipeline
-  val ie_inst = RegEnable(frontend.io.instPacket.bits.inst, bitPatToUInt(NOP), !stall)
+  val ie_inst = RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall)
   val ie_pc = RegEnable(pcReg,!stall)
 
   val me_inst = RegEnable(ie_inst, bitPatToUInt(NOP), !stallME)
@@ -88,12 +88,12 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
 
   // Exception
-  val (ieXcpt, ieCause) = checkExceptions(List(
-//    (csr.io.interruptPending, csr.io.interruptCause),
-    (frontend.io.instPacket.bits.xcpt.ma, Causes.misaligned_fetch.U),
-    (frontend.io.instPacket.bits.xcpt.pf, Causes.fetch_page_fault.U),
-    (frontend.io.instPacket.bits.xcpt.gf, Causes.fetch_guest_page_fault.U),
-    (frontend.io.instPacket.bits.xcpt.ae, Causes.fetch_access.U),
+  val (ieXcpt, ieCause): (Bool, UInt)  = checkExceptions(List(
+    (csr.io.interruptPending, csr.io.interruptCause),
+    (frontend.io.instPacket.xcpt.ma, Causes.misaligned_fetch.U),
+    (frontend.io.instPacket.xcpt.pf, Causes.fetch_page_fault.U),
+    (frontend.io.instPacket.xcpt.gf, Causes.fetch_guest_page_fault.U),
+    (frontend.io.instPacket.xcpt.ae, Causes.fetch_access.U),
 
     (io.edm.st_ack && io.edm.xcpt.ma, Causes.misaligned_store.U),
     (io.edm.st_ack && io.edm.xcpt.pf, Causes.store_page_fault.U),
@@ -105,17 +105,16 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   ))
 
   // Exception pipeline
-  val ieXcptReg = RegEnable(ieXcpt, !stall)
-  val ieCauseReg = RegEnable(ieCause, !stall)
+  val ieXcptReg = RegEnable(ieXcpt, !stallME)
+  val ieCauseReg = RegEnable(ieCause, !stallME)
 
-  val (meXcpt, meCause) = checkExceptions(List(
+  val (meXcpt, meCause): (Bool, UInt)= checkExceptions(List(
     (ieXcptReg, ieCauseReg),
     (io.edm.ld_ack && io.edm.xcpt.ma, Causes.misaligned_load.U),
     (io.edm.ld_ack && io.edm.xcpt.pf, Causes.load_page_fault.U),
     (io.edm.ld_ack && io.edm.xcpt.gf, Causes.load_guest_page_fault.U),
     (io.edm.ld_ack && io.edm.xcpt.ae, Causes.load_access.U),
   ))
-
 
 
   // Fetch & Issue
@@ -135,7 +134,6 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   frontend.io.exception := meXcpt
   frontend.io.eret := ctrlSig.ecall.asUInt.orR || ctrlSig.ebreak.asUInt.orR || ctrlSig.mret.asUInt.orR
 
-//  frontend.io.dmAck := io.edm.ld_ack || io.edm.st_ack
   frontend.io.stall := stall
 
   frontend.io.aluR := alu.io.R
