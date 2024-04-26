@@ -70,7 +70,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   fq.io.enq.valid := io.epm.ack // Suppose simultaneous ack and data response
 
   // Why this generates nullpointerexception?
-//  def isRVC(inst: UInt): Bool = !(inst(1) && inst(0))
+  //  def isRVC(inst: UInt): Bool = !(inst(1) && inst(0))
 
   // Issue
   val issueable = !io.stall && !io.divBusy
@@ -112,7 +112,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   if (usingOuterBoodAddr) {
     val bootAddrWire = io.epm.bootAddr
   }
-//  val fetchPC = RegInit(bootAddrWire.asUInt, UInt(mxLen.W))
+  //  val fetchPC = RegInit(bootAddrWire.asUInt, UInt(mxLen.W))
   val fetchPC = Reg(UInt(mxLen.W))
   when (reset.asBool) {
     fetchPC := bootAddrWire
@@ -135,8 +135,8 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   // Issue
   fq.io.deq.ready := issue // issue signal will block when stalled
-  io.instPacket.bits.inst := Mux(issue, instIF, 0.U)
-  io.instPacket.bits.xcpt := Mux(issue, xcptIF, 0.U.asTypeOf(new HeartXcpt))
+  io.instPacket.inst := Mux(issue, instIF, 0.U)
+  io.instPacket.xcpt := Mux(issue, xcptIF, 0.U.asTypeOf(new HeartXcpt))
   io.issue := issue
 
 
