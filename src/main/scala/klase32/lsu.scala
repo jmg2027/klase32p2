@@ -25,6 +25,11 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   }
   )
 
+  // LSQ
+
+
+  // Store Buffer
+
   // Request to DM
   io.edm.cmd := Mux1H(Seq(
     (io.lsuctrlIE.isLoad === LoadControl.EN) -> M_XRD,
