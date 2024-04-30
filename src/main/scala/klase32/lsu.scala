@@ -22,13 +22,28 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
     val addr = Input(UInt(k.addrWidth.W))
     val rddata = Output(UInt(k.dataWidth.W))
     val wrdata = Input(UInt(k.dataWidth.W))
+
+    val rs1addr = Input(UInt(regIdWidth.W))
+    val rs2addr = Input(UInt(regIdWidth.W))
   }
   )
 
   // LSQ
+  // val lsq = Module(new Queue(new LoadStoreQueueIntf, loadstorequeueEntries, hasFlush = true))
+  val lsq = Vec(loadstorequeueEntries, Reg(new LoadStoreQueueIntf()))
+  val checkLoadDependency = lsq.map(x => x.isLoad && ((x.rdaddr === io.rs1addr) && (x.rdaddr === io.rs2addr)))
 
+  // lsq stall: rd is used in previous pipeline and ack not yet reached
+  // in-order lsq, no address check
+  // check dependency only
+  // if no dependency, no stall and load/store continues to be enq
+  // lsq entry: isload, rd
+  // stalls when dependency occurs (IE/RSX, ME/RD)
+  // enq cond: !full
+  // fence -> stall pipeline until all lsq entries are committed -> empty
+  // load/store request should be issued in sequence
+  // enq and memory request
 
-  // Store Buffer
 
   // Request to DM
   io.edm.cmd := Mux1H(Seq(
