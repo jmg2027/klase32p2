@@ -2,7 +2,6 @@ package klase32
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.BundleLiterals._
 import chisel3.util.BitPat.bitPatToUInt
 import klase32.config._
 import klase32.param.KlasE32ParamKey
@@ -64,8 +63,9 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   stallSig.me.wfi := csr.io.wfiOut
   stallSig.me.hzd := hzd.io.stall
   stallSig.me.fence := ctrlSig.fence.asUInt.orR && (io.edm.ld_ack || io.edm.st_ack)
-  val stallIE = stallSig.ie.asUInt.orR
-  val stallME = stallSig.me.asUInt.orR
+  stallSig.me.fence := ctrlSig.fence.asUInt.orR && (io.edm.ld_ack || io.edm.st_ack)
+  val stallIE = stallSig.ie.orR
+  val stallME = stallSig.me.orR
   val stall = stallIE && stallME
 
 
@@ -150,8 +150,9 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   val rs2 = Mux(hzd.io.bypassRS2RD, reg.io.rp(1).data, lsu.io.rddata)
 
   reg.io.wp(0).bits.addr := ctrlSig.rd
-  reg.io.wp(1).bits.addr := ctrlSig.rd
+  reg.io.wp(1).bits.addr := me_rdaddr
   reg.io.wp(0).valid := ctrlSig.w1Wb.asUInt.orR && !stall
+  // FIXME: Decoupling
   reg.io.wp(1).valid := me_isLoad.asUInt.orR && !stallME
 
   reg.io.wp(0).bits.data := Mux1H(Seq(
@@ -216,6 +217,9 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   lsu.io.edm <> io.edm
   lsu.io.addr := alu.io.R
   lsu.io.wrdata := rs2
+
+  lsu.io.rs1addr := ctrlSig.rs1
+  lsu.io.rs2addr := ctrlSig.rs2
 
   def checkExceptions(x: Seq[(Bool, UInt)]) =
     (x.map(_._1).reduce(_||_), PriorityMux(x))
