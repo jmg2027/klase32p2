@@ -2,16 +2,9 @@ package klase32
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.BundleLiterals._
-import klase32.CSR.CSRRegBundle
 import klase32.config._
 import klase32.param.KlasE32ParamKey
 
-import scala.collection.mutable
-import klase32.CoreBundle
-import klase32.HasCoreParameters
-
-// from rocket csr
 
 object CSR {
   abstract class CSRRegTemplate[T <: Data](implicit p: Parameters) extends CoreBundle with HasCoreParameters {
@@ -168,6 +161,7 @@ object CSR {
     def reg = RegInit(default.asTypeOf(field))
   }
 
+  // FIXME
   class MISA(implicit p: Parameters) extends CSRReg {
     override def default: UInt = {
       val isaMaskString =
@@ -409,6 +403,7 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
 
 
   // WFI
+  // FIXME: CLK Gating
   val wfi = RegInit(false.B)
   when (io.wfi.asUInt.orR) {
     wfi := true.B
