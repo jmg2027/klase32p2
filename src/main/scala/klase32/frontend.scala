@@ -113,15 +113,16 @@ class Frontend(implicit p: Parameters) extends CoreModule {
     val bootAddrWire = io.epm.bootAddr
   }
   //  val fetchPC = RegInit(bootAddrWire.asUInt, UInt(mxLen.W))
+  // FIXME: MUX
   val fetchPC = Reg(UInt(mxLen.W))
   when (reset.asBool) {
     fetchPC := bootAddrWire
     fq.flush := true.B
+  }.elsewhen(io.exception || io.eret) {
+    fetchPC := io.evec
+    fq.flush := true.B
   }.elsewhen (jump) {
     fetchPC := jumpPC
-    fq.flush := true.B
-  }.elsewhen (io.exception || io.eret) {
-    fetchPC := io.evec
     fq.flush := true.B
   }.otherwise {
     fetchPC := fetchPC + issueLength
