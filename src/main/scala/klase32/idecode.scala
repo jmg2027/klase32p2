@@ -5,7 +5,6 @@ import chisel3.util._
 
 import chisel3.util.experimental.decode.{DecodeField, DecodePattern, BoolDecodeField}
 import snitch.enums._
-import snitch.types._
 
 
 /**
