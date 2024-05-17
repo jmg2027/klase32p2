@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
-import klase32.param.KlasE32ParamKey
+import klase32.param.KLASE32ParamKey
 
 class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
   val ctrl = Input(CtrlControlIE())
@@ -38,7 +38,7 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
 
 class Frontend(implicit p: Parameters) extends CoreModule {
   import CtrlControlIE._
-  val k = p(KlasE32ParamKey)
+  val k = p(KLASE32ParamKey)
 
   val io = IO(new FrontendIO())
 
@@ -64,7 +64,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // For now 32-bit N entries
   // To extend to compressed mode, fetch queue should handle 16-bit data
   // when empty, enq data will be dequeued instantly
-  val fq = Module(new Queue(new FetchQueueIntf, fetchqueueEntries, flow = true, hasFlush = true))
+  val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = true, hasFlush = true))
   fq.io.enq.bits.data := io.epm.data
   fq.io.enq.bits.xcpt := io.epm.xcpt
   fq.io.enq.valid := io.epm.ack // Suppose simultaneous ack and data response
