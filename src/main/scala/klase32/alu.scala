@@ -4,11 +4,11 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
-import klase32.param.KlasE32ParamKey
+import klase32.param.KLASE32ParamKey
 
 
 class ALU(implicit p: Parameters) extends CoreModule()(p) with HasCoreParameters {
-  val k = p(KlasE32ParamKey)
+  val k = p(KLASE32ParamKey)
 
   val io = IO(new Bundle{
     val ctrl = Input(ALUControlIE())
@@ -20,12 +20,10 @@ class ALU(implicit p: Parameters) extends CoreModule()(p) with HasCoreParameters
   )
   import ALUControlIE._
 
-  def isSub = io.ctrl.asUInt(4) // GE, GEU, LT, LTU, SLT, SLTU, SUB, SRA
+  def isSub = io.ctrl.asUInt(3) // GE, GEU, LT, LTU, SLT, SLTU, SUB, SRA
   def isCompareUnsigned = io.ctrl.asUInt(0) // GEU, LTU, SLTU
   def isCompareInversed = io.ctrl.asUInt(1) // GE, GEU, NE
-  def isCompareEqual = !io.ctrl.asUInt(4) // EQ, NE
-  def isShiftLeft = io.ctrl.asUInt(0) && io.ctrl.asUInt(1) // SLL
-  // def isShiftLeft = io.ctrl(0) & io.ctrl(1) io.ctrl(2) // SLL
+  def isCompareEqual = !io.ctrl.asUInt(3) // EQ, NE
 
   // Modified Rocket ALU
   // ADD, SUB
@@ -38,7 +36,7 @@ class ALU(implicit p: Parameters) extends CoreModule()(p) with HasCoreParameters
     Mux(io.A(mxLen-1) === io.B(mxLen-1), adder_result(mxLen-1),
       Mux(isCompareUnsigned, io.B(mxLen-1), io.A(mxLen-1)))
   // GE, GEU, LT, LTU, SLT, SLTU, EQ, NE
-  io.F := Mux(io.ctrl === default, isCompareInversed ^ Mux(isCompareEqual, a_xor_b === 0.U, lt), 0.U)
+    io.F := Mux(io.ctrl === default, 0.U, isCompareInversed ^ Mux(isCompareEqual, a_xor_b === 0.U, lt))
 
   // SLL, SRL, SRA
   val (shamt, shin_r) = (io.B(4,0), io.A)
