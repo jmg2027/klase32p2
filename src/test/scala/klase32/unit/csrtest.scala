@@ -1,11 +1,13 @@
-package klase32.unit
+package klase32
+
 import chisel3._
 import chiseltest._
-import org.scalatest.flatspec.AnyFlatSpec
+import klas.KlasTest
 import klase32.config._
-import klase32.param.KlasE32ParamKey
+import klase32.param.DefaultConfig
+import klase32.CSR.CSRAddr
 
-class CSRModuleTest extends AnyFlatSpec with ChiselScalatestTester {
+class CSRModuleTest extends KlasTest {
   behavior of "CSRModule"
 
   it should "correctly handle read and write operations for various CSRs" in {
@@ -13,23 +15,27 @@ class CSRModuleTest extends AnyFlatSpec with ChiselScalatestTester {
 
     test(new CSRModule) { c =>
       // Function to test CSR read and write operations
-      def testCSRReadWrite(addr: UInt, writeData: BigInt, readBack: BigInt, readMask: BigInt): Unit = {
-        c.io.ctrl.addr.poke(addr)
+      def testCSRReadWrite(addr: Int, writeData: BigInt, readBack: BigInt, readMask: BigInt): Unit = {
+        println(addr: Int, writeData: BigInt, readBack: BigInt, readMask: BigInt)
+        c.io.ctrl.addr.poke(addr.U)
         c.io.ctrl.in.poke(writeData.U)
-        c.io.ctrl.inst.poke(CSRInstMuxIE.RW) // Assuming RW is the correct instruction for a write operation
+        c.io.ctrl.inst.poke(CSRInstMuxIE.RW)
         c.clock.step(1)
-        c.io.ctrl.inst.poke(CSRInstMuxIE.RW) // Change to a read operation if needed
+//        println(c.io.rd.peekInt(), readBack & readMask)
+        c.io.ctrl.inst.poke(CSRInstMuxIE.RW)
+//        println(c.io.rd.peekInt(), readBack & readMask)
         c.clock.step(1)
+        println(c.io.rd.peekInt(), readBack & readMask)
         c.io.rd.expect((readBack & readMask).U)
       }
 
       // Test each CSR with specific scenarios
-      // You should add all relevant CSR addresses and data scenarios
       val csrAddresses = Seq(CSR.CSRAddr.mstatus, CSR.CSRAddr.misa, CSR.CSRAddr.mie)
       val testData = Seq(
-        (0x300.U, 0x00000002L, 0x00000002L, 0xFFFFFFFFL), // Example data for mstatus
-        (0x301.U, 0x40000000L, 0x40000000L, 0xFFFFFFFFL), // Example data for misa
-        (0x304.U, 0x00000001L, 0x00000001L, 0xFFFFFFFFL)  // Example data for mie
+//        (CSRAddr.medeleg, 0x00000002L, 0x00000002L, 0xFFFFFFFFL), // Example data for mstatus
+        (CSRAddr.mstatus, 0x00000002L, 0x00000002L, 0xFFFFFFFFL), // Example data for mstatus
+        (0x301, 0x40000000L, 0x40000000L, 0xFFFFFFFFL), // Example data for misa
+        (0x304, 0x00000001L, 0x00000001L, 0xFFFFFFFFL)  // Example data for mie
       )
 
       for ((addr, writeData, expectedReadback, mask) <- testData) {
