@@ -4,12 +4,12 @@ import chisel3._
 import chisel3.util._
 import chisel3.util.BitPat.bitPatToUInt
 import klase32.config._
-import klase32.param.KlasE32ParamKey
+import klase32.param.KLASE32ParamKey
 import snitch.enums.{OperandType, RdType}
 import freechips.rocketchip.rocket.Causes
 
-class KlasE32IO(implicit p: Parameters) extends Bundle with KlasE32IOEtc {
-  val k = p(KlasE32ParamKey)
+class KLASE32IO(implicit p: Parameters) extends Bundle with KLASE32IOEtc {
+  val k = p(KLASE32ParamKey)
 
   //  val acc = new Acc.Interface
   val interrupt = Input(new Interrupt)
@@ -19,16 +19,16 @@ class KlasE32IO(implicit p: Parameters) extends Bundle with KlasE32IOEtc {
   //  val dbg = new DbgIntf
 }
 
-trait KlasE32IOEtc extends Bundle {
+trait KLASE32IOEtc extends Bundle {
   val resetValue = Input(UInt(32.W))
   val powerdown = Output(Bool())
 }
 
-class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
+class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   with HasCoreParameters {
   val NOP = BitPat("b00000000000000000000000000010011")
 
-  val io = IO(new KlasE32IO)
+  val io = IO(new KLASE32IO)
 
   // FIXME: WFI
   io.powerdown := DontCare
@@ -52,18 +52,12 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   // Stall
   val stallSig = WireInit(new Stall, DontCare)
-  // FIXME: LSQ
-  when (io.edm.ld_req) {
-    stallSig.me.load := !io.edm.ld_ack
-  }
-  when (io.edm.st_req) {
-    stallSig.ie.store := !io.edm.st_ack
-  }
+  stallSig.ie.store := !lsu.io.storeFull
   stallSig.ie.csr := csr.io.csrWrite
+  stallSig.me.load := !lsu.io.loadFull
   stallSig.me.wfi := csr.io.wfiOut
   stallSig.me.hzd := hzd.io.stall
-  stallSig.me.fence := ctrlSig.fence.asUInt.orR && (io.edm.ld_ack || io.edm.st_ack)
-  stallSig.me.fence := ctrlSig.fence.asUInt.orR && (io.edm.ld_ack || io.edm.st_ack)
+  stallSig.me.fence := ctrlSig.fence.asUInt.orR && !(lsu.io.loadFull || lsu.io.storeFull)
   val stallIE = stallSig.ie.orR
   val stallME = stallSig.me.orR
   val stall = stallIE && stallME
@@ -95,10 +89,10 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     (frontend.io.instPacket.xcpt.gf, Causes.fetch_guest_page_fault.U),
     (frontend.io.instPacket.xcpt.ae, Causes.fetch_access.U),
 
-    (io.edm.st_ack && io.edm.xcpt.ma, Causes.misaligned_store.U),
-    (io.edm.st_ack && io.edm.xcpt.pf, Causes.store_page_fault.U),
-    (io.edm.st_ack && io.edm.xcpt.gf, Causes.store_guest_page_fault.U),
-    (io.edm.st_ack && io.edm.xcpt.ae, Causes.store_access.U),
+    (lsu.io.stXcpt.ma, Causes.misaligned_store.U),
+    (lsu.io.stXcpt.pf, Causes.store_page_fault.U),
+    (lsu.io.stXcpt.gf, Causes.store_guest_page_fault.U),
+    (lsu.io.stXcpt.ae, Causes.store_access.U),
     (ctrlSig.illegal === IllegalInstIE.EN, Causes.illegal_instruction.U),
     (ctrlSig.ecall === EcallIE.EN, Causes.machine_ecall.U),
     (ctrlSig.ebreak === EbreakIE.EN, Causes.breakpoint.U),
@@ -110,10 +104,10 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   val (meXcpt, meCause): (Bool, UInt)= checkExceptions(List(
     (ieXcptReg, ieCauseReg),
-    (io.edm.ld_ack && io.edm.xcpt.ma, Causes.misaligned_load.U),
-    (io.edm.ld_ack && io.edm.xcpt.pf, Causes.load_page_fault.U),
-    (io.edm.ld_ack && io.edm.xcpt.gf, Causes.load_guest_page_fault.U),
-    (io.edm.ld_ack && io.edm.xcpt.ae, Causes.load_access.U),
+    (lsu.io.ldXcpt.ma, Causes.misaligned_load.U),
+    (lsu.io.ldXcpt.pf, Causes.load_page_fault.U),
+    (lsu.io.ldXcpt.gf, Causes.load_guest_page_fault.U),
+    (lsu.io.ldXcpt.ae, Causes.load_access.U),
   ))
 
 
@@ -191,6 +185,7 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   csr.io.mret := ctrlSig.mret
   csr.io.wfi := ctrlSig.wfi
 
+  // FIXME: When speculative load/store supported, exception should be failed load/store pc
   csr.io.exception := meXcpt
   csr.io.cause := meCause
   csr.io.epc := me_pc
@@ -217,9 +212,6 @@ class KlasE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   lsu.io.edm <> io.edm
   lsu.io.addr := alu.io.R
   lsu.io.wrdata := rs2
-
-  lsu.io.rs1addr := ctrlSig.rs1
-  lsu.io.rs2addr := ctrlSig.rs2
 
   def checkExceptions(x: Seq[(Bool, UInt)]) =
     (x.map(_._1).reduce(_||_), PriorityMux(x))
