@@ -4,12 +4,12 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
-import klase32.param.KlasE32ParamKey
+import klase32.param.KLASE32ParamKey
 import _root_.klase32.HazardME.RD
 
 
 class Hazards(implicit p: Parameters) extends CoreModule {
-  val k = p(KlasE32ParamKey)
+  val k = p(KLASE32ParamKey)
 
   val io = IO(new Bundle{
     val rs1Valid = Input(Bool())
@@ -46,14 +46,14 @@ class Hazards(implicit p: Parameters) extends CoreModule {
   when(io.loadValid && io.rs1Valid && (io.rs1Addr === io.rdAddr)) {
     io.bypassRS1RD := true.B
   }
-    
+
   io.bypassRS2RD := false.B
   when (io.loadValid && io.rs2Valid && (io.rs2Addr === io.rdAddr)) {
     io.bypassRS2RD := true.B
   }
 
   // Bypass
- 
+
 
   // when(
   //   (io.divBusy && io.ctrlIE(0) && (io.rs1Addr === io.divAddr)) ||
