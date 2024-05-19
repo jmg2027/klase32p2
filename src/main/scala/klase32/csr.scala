@@ -16,9 +16,9 @@ object CSR {
 
     // Can't I use this as all bundle's type?
 //    def reg = RegInit(default.asTypeOf(field))
-    def reg = RegInit(default.asTypeOf(chiselTypeOf(field)))
+    lazy val reg: field.type = RegInit(default.asTypeOf(chiselTypeOf(field)))
 //    val reg = RegInit(default.asTypeOf(new field))
-    def write[T <: Data](wdata: T) = {
+    def write[T <: Data](wdata: T): Unit = {
       val newData = wdata.asTypeOf(chiselTypeOf(field))
 //      val newData = wdata.asTypeOf(chiselTypeOf(new field))
       reg := newData
@@ -29,7 +29,7 @@ object CSR {
 
   class CSRReg(val defaultValue: UInt = 0.U)(implicit p: Parameters) extends CoreCSRReg {
 //    val field = new Bundle {val data = UInt(csrWidthM.W)}
-    class field extends Bundle {
+    def field = new Bundle {
       val data = UInt(csrWidthM.W)
     }
 
@@ -41,7 +41,7 @@ object CSR {
 
   class MStatus (implicit p: Parameters) extends CoreCSRReg {
 //    val field = new Bundle{
-    class field extends Bundle{
+    def field = new Bundle{
       //      val sd = Bool()
       //      val zero4 = UInt(23.W)
       //      val mpv = Bool()
@@ -84,7 +84,7 @@ object CSR {
   // v1.12
   class MStatush(implicit p: Parameters) extends CoreCSRReg {
 //    val field = new Bundle{
-    class field extends Bundle{
+    def field = new Bundle{
       val mbe = Bool()
       val sbe = Bool()
       val zero0 = UInt(4.W)
@@ -173,7 +173,7 @@ object CSR {
     val k = p(KLASE32ParamKey)
 
 //    val field = new Bundle {
-    class field extends Bundle {
+    def field = new Bundle {
       val base = UInt((k.core.mxLen-2).W)
       val mode = UInt(2.W)
     }
