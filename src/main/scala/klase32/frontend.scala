@@ -51,14 +51,20 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   val bootingUpdate = Wire(Bool())
   val booting = Wire(Bool())
-  val regBooting = RegEnable(booting && !io.stall, 1.B, bootingUpdate)
+  val regBooting = RegInit(false.B)
 
   bootingUpdate := false.B
   booting := false.B
   when(regBooting) {
     booting := true.B
+    bootingUpdate := true.B
+  }.otherwise {
     bootingUpdate := false.B
   }
+
+when(bootingUpdate && !io.stall) {
+  regBooting := booting
+}
   // Fetch Queue
   // FIXME: Support for C extension
   // For now 32-bit N entries
@@ -95,16 +101,10 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   val pcWrite = Mux(jump, jumpPC, io.if_pc + Mux(!(instIF(1) && instIF(0)), 2.U, 4.U))
 
-  when(jump || issue) {
-    io.pcRegWrite.valid := true.B
-    io.pcRegWrite.bits := pcWrite
-  } otherwise {
-    io.pcRegWrite.valid := false.B
-    io.pcRegWrite.bits := 0.U
-  }
+  io.pcRegWrite.valid := jump || issue
+  io.pcRegWrite.bits := Mux(jump || issue, pcWrite, 0.U)
 
   // Fetch PC
-
   val issueLength = Mux((!(io.epm.data(0) && io.epm.data(1))), 2.U, 4.U)
   val fetch = fq.io.enq.ready
 
@@ -112,8 +112,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   if (usingOuterBoodAddr) {
     val bootAddrWire = io.epm.bootAddr
   }
-  //  val fetchPC = RegInit(bootAddrWire.asUInt, UInt(mxLen.W))
-  // FIXME: MUX
+
   val fetchPC = Reg(UInt(mxLen.W))
   when (reset.asBool) {
     fetchPC := bootAddrWire

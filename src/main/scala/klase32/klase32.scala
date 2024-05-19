@@ -60,8 +60,11 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   stallSig.me.fence := ctrlSig.fence.asUInt.orR && !(lsu.io.loadFull || lsu.io.storeFull)
   val stallIE = stallSig.ie.orR
   val stallME = stallSig.me.orR
-  val stall = stallIE && stallME
+  val stall = stallIE || stallME
 
+  // Flush
+  val flush = Wire(Bool())
+  flush := csr.io.exception || csr.io.eret || frontend.io.flushEn
 
   // PC Register
   val bootAddrWire = WireInit(bootAddrParam.U)
@@ -193,6 +196,12 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   // interrupt
   csr.io.interrupt := io.interrupt
+
+  // Flush pipeline
+  when(flush) {
+    ie_inst := bitPatToUInt(NOP)
+    me_inst := bitPatToUInt(NOP)
+  }
 
 
   // Hazard

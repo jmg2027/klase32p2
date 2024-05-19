@@ -32,10 +32,10 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   }
   )
   // Align address
-  val addrAligned = io.addr.head(io.addr.getWidth - log2Ceil(addressAlignByte)) ## Fill(log2Ceil(addressAlignByte) - 1, 0.U)
+  val addrAligned = Cat(io.addr(k.addrWidth - 1, log2Ceil(addressAlignByte)), 0.U(log2Ceil(addressAlignByte).W))
   val offsetAligned = io.addr(log2Ceil(addressAlignByte) - 1, 0)
 
-  // Align store data
+  // Align store data: shift the write data based on the address offset and create a mask for the store operation
   val storeDataAligned = io.wrdata << (offsetAligned << 3).asUInt
   val storeDataMask = Mux1H(
     Seq(
@@ -45,7 +45,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
     )
   )
 
-  // Align load data
+  // Align load data: shift the loaded data based on the address offset and adjust based on the load size and sign
   val loadOffsetAligned = RegEnable(offsetAligned, io.lsuctrlIE.isLoad === LoadControl.EN)
   val loadDataAligned = {
     val shiftedData = io.edm.ld_rdata >> (loadOffsetAligned << 3).asUInt
@@ -65,18 +65,19 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   // Store buffer
   val sb = Module(new QueueWithAccessableEntry(new StoreBufferEntry, storeBufferEntries, flow = true))
   sb.io.enq.valid := io.lsuctrlIE.isStore === StoreControl.EN
-  io.storeFull := sb.io.enq.ready
+  io.storeFull := !sb.io.enq.ready
   sb.io.enq.bits.addr := addrAligned
   sb.io.enq.bits.data := storeDataAligned
   sb.io.enq.bits.mask := storeDataMask
 
 
   // Request to DM
-  io.edm.cmd := Mux1H(Seq(
-    (io.lsuctrlIE.isLoad === LoadControl.EN) -> M_XRD,
-    ((sb.io.deq.valid) && (sb.io.deq.bits.mask === "b1111".U)) -> M_XWR,
-    ((sb.io.deq.valid) && (sb.io.deq.bits.mask =/= "b1111".U)) -> M_XWR,
-  )
+  io.edm.cmd := MuxCase(0.U, 
+    Seq(
+      (io.lsuctrlIE.isLoad === LoadControl.EN) -> M_XRD,
+      ((sb.io.deq.valid) && (sb.io.deq.bits.mask === "b1111".U)) -> M_XWR,
+      ((sb.io.deq.valid) && (sb.io.deq.bits.mask =/= "b1111".U)) -> M_XWR,
+    )
   )
 
   io.edm.is_mmio := DontCare
@@ -100,7 +101,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   // Response from DM: ME stage
   io.rddata := Mux(io.edm.ld_ack, loadDataAligned, 0.U)
 
-  // Exception
+  // Exception handling
   io.stXcpt := {
     val result = Wire(new HeartXcpt)
     (result.getElements zip io.edm.xcpt.getElements).foreach {
