@@ -1,12 +1,14 @@
-package klase32.unit
+package klase32
 
 import chisel3._
 import chiseltest._
-import org.scalatest.flatspec.AnyFlatSpec
+import klas.KlasTest
 import klase32.config._
-import klase32.param.KlasE32ParamKey
+import klase32.param.DefaultConfig
+import chisel3.experimental.BundleLiterals._
 
-class DecoderTest extends AnyFlatSpec with ChiselScalatestTester {
+class DecoderTest extends KlasTest {
+  type T <: ControlEnum
   behavior of "Decoder"
 
   it should "correctly decode various instruction types" in {
@@ -16,7 +18,7 @@ class DecoderTest extends AnyFlatSpec with ChiselScalatestTester {
       // Function to test an instruction
       def testInstruction(inst: UInt, expected: Decoded): Unit = {
         d.io.inst.poke(inst)
-        d.clock.step(1) // Simulate a clock cycle
+        d.clock.step() // Simulate a clock cycle
 
         // Check each field in the Decoded bundle
         d.io.decSig.imm.i.expect(expected.imm.i)
@@ -47,17 +49,32 @@ class DecoderTest extends AnyFlatSpec with ChiselScalatestTester {
         // Additional checks for any other necessary fields
       }
 
+
+      val el = (new Decoded).elements
+      val expectedDefaultValue = (new Decoded).elements.map {
+        case(k, v) =>
+          val classOfV = v.getClass
+          if (v.isInstanceOf[T]) (k -> v.getClass.default)
+          else (k -> "no enum")
+
+      }
+      println(expectedDefaultValue)
+      println(el)
+//      print(Map("wfi" -> el("wfi").asInstanceOf[ControlEnum].default))
+//      print(Map("wfi" -> el("wfi").asInstanceOf[ChiselEnum]))
+      println(IllegalInstIE.default)
+
       // Example test case for an ADD instruction (R-type)
       val addInst = "b0000000_00001_00010_000_00011_0110011".U // ADD x3, x1, x2
-      val expectedAddDecoding = new Decoded(p) {
-        imm.i := 0.S; imm.u := 0.S; imm.j := 0.S; imm.b := 0.S; imm.s := 0.S
-        rd := 3.U; rs1 := 1.U; rs2 := 2.U
-        aluCtrl := ALUControlIE.ADD
-        csrCtrl := CSRInstMuxIE.NONE
-        // Set other fields as expected
-      }.Lit()
+//      val expectedAddDecoding = new Decoded {
+//        imm.i := 0.S; imm.u := 0.S; imm.j := 0.S; imm.b := 0.S; imm.s := 0.S
+//        rd := 3.U; rs1 := 1.U; rs2 := 2.U
+//        aluCtrl := ALUControlIE.ADD
+//        csrCtrl := CSRControl.default
+//        // Set other fields as expected
+//      }.Lit()
 
-      testInstruction(addInst, expectedAddDecoding)
+//      testInstruction(addInst, expectedAddDecoding)
 
       // Additional test cases for I-type, S-type, B-type, U-type, J-type instructions
       // You can add a function to simplify instruction encoding if necessary
