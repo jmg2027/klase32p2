@@ -32,14 +32,14 @@ class Decoded(implicit p: Parameters) extends CoreBundle {
 
   val aluCtrl = ALUControlIE()
 
-  val csrCtrl = CSRInstMuxIE()
+  val csrCtrl = CSRControl()
 
   val rdType = RdType()
-  val useRD = Bool()
-  val w1Wb = RegXControlIE()
-  val w2Wb = RegXControlME()
+//  val useRD = Bool()
+  val w1Wb = W1WritebackIE()
+//  val w2Wb = RegXControlME()
 
-  val pcCtrl = CtrlControlIE()
+  val frontendCtrl = FrontendControlIE()
 
   val lsuCtrl = new LSUControl
 
@@ -81,9 +81,9 @@ class Decoder(implicit p: Parameters) extends CoreModule {
 
     RdField -> d.rdType,
     W1WritebackField -> d.w1Wb,
-    W2WritebackField -> d.w2Wb,
+//    W2WritebackField -> d.w2Wb,
 
-    CtrlControlIEField -> d.pcCtrl,
+    CtrlControlIEField -> d.frontendCtrl,
 
     LsSizeField -> d.lsuCtrl.lsSize,
     StoreField -> d.lsuCtrl.isStore,
@@ -102,7 +102,7 @@ class Decoder(implicit p: Parameters) extends CoreModule {
     // MPYMDField -> d.mpyCtrl,
   )
 
-  d.useRD := DontCare
+//  d.useRD := DontCare
 
   val instTable =
     RV32IDecode.table ++
