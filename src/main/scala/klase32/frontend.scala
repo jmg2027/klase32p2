@@ -7,7 +7,7 @@ import klase32.config._
 import klase32.param.KLASE32ParamKey
 
 class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
-  val ctrl = Input(CtrlControlIE())
+  val ctrl = Input(FrontendControlIE())
 
   val if_pc = Input(UInt(mxLen.W)) // Current PC
   // val ie_pc = Input(UInt(mxLen.W)) // 1 cycle before PC
@@ -37,7 +37,7 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
 
 
 class Frontend(implicit p: Parameters) extends CoreModule {
-  import CtrlControlIE._
+  import FrontendControlIE._
   val k = p(KLASE32ParamKey)
 
   val io = IO(new FrontendIO())
@@ -51,20 +51,14 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   val bootingUpdate = Wire(Bool())
   val booting = Wire(Bool())
-  val regBooting = RegInit(false.B)
+  val regBooting = RegEnable(booting && !io.stall, 1.B, bootingUpdate)
 
   bootingUpdate := false.B
   booting := false.B
   when(regBooting) {
     booting := true.B
-    bootingUpdate := true.B
-  }.otherwise {
     bootingUpdate := false.B
   }
-
-when(bootingUpdate && !io.stall) {
-  regBooting := booting
-}
   // Fetch Queue
   // FIXME: Support for C extension
   // For now 32-bit N entries
@@ -101,10 +95,16 @@ when(bootingUpdate && !io.stall) {
 
   val pcWrite = Mux(jump, jumpPC, io.if_pc + Mux(!(instIF(1) && instIF(0)), 2.U, 4.U))
 
-  io.pcRegWrite.valid := jump || issue
-  io.pcRegWrite.bits := Mux(jump || issue, pcWrite, 0.U)
+  when(jump || issue) {
+    io.pcRegWrite.valid := true.B
+    io.pcRegWrite.bits := pcWrite
+  } otherwise {
+    io.pcRegWrite.valid := false.B
+    io.pcRegWrite.bits := 0.U
+  }
 
   // Fetch PC
+
   val issueLength = Mux((!(io.epm.data(0) && io.epm.data(1))), 2.U, 4.U)
   val fetch = fq.io.enq.ready
 
@@ -112,7 +112,8 @@ when(bootingUpdate && !io.stall) {
   if (usingOuterBoodAddr) {
     val bootAddrWire = io.epm.bootAddr
   }
-
+  //  val fetchPC = RegInit(bootAddrWire.asUInt, UInt(mxLen.W))
+  // FIXME: MUX
   val fetchPC = Reg(UInt(mxLen.W))
   when (reset.asBool) {
     fetchPC := bootAddrWire
