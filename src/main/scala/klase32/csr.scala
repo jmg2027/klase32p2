@@ -14,10 +14,15 @@ object CSR {
 
     def default: UInt
 
-    def reg: T = RegInit(Wire(field), default.asTypeOf(chiselTypeOf(field)))
+    val reg: T = RegInit(field, default.asTypeOf(field))
     def write[D <: Data](wdata: D): Unit = {
-      val newData = Wire(wdata.asTypeOf(chiselTypeOf(field)))
+      val newData = Wire(field)
+      newData := wdata.asTypeOf(field)
       reg := newData
+    }
+
+    def read[D <: Data](rdata: D): Unit = {
+      rdata := reg.asTypeOf(rdata)
     }
   }
 
@@ -112,7 +117,7 @@ object CSR {
     }
   }
   class CSRReg(val defaultValue: UInt = 0.U)(implicit p: Parameters) extends CoreCSRReg[CSRField.CSRReg] {
-    override def field = new CSRField.CSRReg()
+    override def field = new CSRField.CSRReg
 //    class Field extends Bundle {
 //      val data = UInt(csrWidthM.W)
 //    }
@@ -125,6 +130,7 @@ object CSR {
     override def field = new CSRField.MStatus
 
     def default = 0.U
+//    override val reg = RegInit(field, default.asTypeOf(field))
   }
 
   // v1.12
@@ -264,7 +270,7 @@ class CSRCtrl(implicit p: Parameters)
   extends CoreBundle
     with HasCoreParameters {
   val in = UInt(csrWidthM.W)
-  val inst = CSRInstMuxIE()
+  val inst = CSRControl()
   val addr = UInt(12.W)
 }
 
@@ -272,8 +278,6 @@ class CSRIntfIO(implicit p: Parameters)
   extends CoreBundle
     with HasCoreParameters {
   val ctrl = Input(new CSRCtrl())
-
-  val out = Output(new CSR.CSRList())
 
   val rd = Output(UInt(csrWidthM.W))
 
@@ -301,12 +305,10 @@ class CSRIntfIO(implicit p: Parameters)
 
 class CSRModule(implicit p: Parameters) extends CoreModule {
   import CSR._
-  import CSRInstMuxIE._
+  import CSRControl._
 
   val io = IO(new CSRIntfIO)
   val csr = new CSRList
-
-  io.out := DontCare
 
   //  csr.mhartid.reg := io.hartId
   csr.mhartid.write(io.hartId)
@@ -356,18 +358,9 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     (io.ctrl.inst === RC) -> (io.ctrl.in & (~io.rd).asUInt),
   ))
 
-  printf(cf"wen: $wen\n")
-  printf(cf"wdata: $wdata\n")
-  //  printf(cf"wdata: ${wdata.asTypeOf((new MStatus).field)}\n")
-  printf(cf"csraddr.mstatus: ${csrAddr(CSRAddr.mstatus)}\n")
-  printf(cf"csraddr.medeleg: ${csrAddr(CSRAddr.medeleg)}\n")
-
-  val testreg = RegInit(0.U(32.W))
-
   when (wen) {
     when(csrAddr(CSRAddr.mstatus)) {
       csr.mstatus.write(wdata)
-      printf(cf"mstatus reg: ${csr.mstatus.reg}\n")
     }
     when(csrAddr(CSRAddr.mstatush)) {
       csr.mstatush.write(wdata)
@@ -427,13 +420,13 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
   io.evec := Mux(csr.mtvec.reg.mode === 0.U, csr.mtvec.reg.base, csr.mtvec.reg.base + (io.cause << 2))
   val tval = Mux(io.ebreak.asUInt.orR, io.epc, io.loadAddr)
   when (exception) {
-    csr.mepc.reg := io.epc
-    csr.mcause.reg := io.cause
-    csr.mtval.reg := tval
+    csr.mepc.write(io.epc)
+    csr.mcause.write(io.cause)
+    csr.mtval.write(tval)
   }
 
   when (io.mret.asUInt.orR) {
-    io.evec := csr.mepc.reg
+    csr.mepc.read(io.evec)
   }
 
   // Interrupt
