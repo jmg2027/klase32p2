@@ -5,7 +5,6 @@ import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
 import klase32.param.KLASE32ParamKey
-import _root_.klase32.HazardME.RD
 
 
 class Hazards(implicit p: Parameters) extends CoreModule {
