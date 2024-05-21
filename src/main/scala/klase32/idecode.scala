@@ -91,8 +91,8 @@ object AluField extends InstEnumField(ALUControlIE) {
   override def typeChecker = _.isInstanceOf[AluProperty]
 }
 
-case class CSRControlProperty(op: CSRInstMuxIE.Type) extends InstProperty(op)
-object CSRControlField extends InstEnumField(CSRInstMuxIE) {
+case class CSRControlProperty(op: CSRControl.Type) extends InstProperty(op)
+object CSRControlField extends InstEnumField(CSRControl) {
   override def name = "csr instruction"
   override def typeChecker = _.isInstanceOf[CSRControlProperty]
 }
@@ -109,16 +109,10 @@ object WriteRdField extends InstBoolField {
   override def typeChecker = _.isInstanceOf[WriteRdProperty]
 }
 
-case class W1WritebackProperty(op: RegXControlIE.Type) extends InstProperty(op)
-object W1WritebackField extends InstEnumField(RegXControlIE) {
+case class W1WritebackProperty(op: W1WritebackIE.Type) extends InstProperty(op)
+object W1WritebackField extends InstEnumField(W1WritebackIE) {
   override def name = "w1 writeback"
   override def typeChecker = _.isInstanceOf[W1WritebackProperty]
-}
-
-case class W2WritebackProperty(op: RegXControlME.Type) extends InstProperty(op)
-object W2WritebackField extends InstEnumField(RegXControlME) {
-  override def name = "w2 writeback"
-  override def typeChecker = _.isInstanceOf[W2WritebackProperty]
 }
 
 case class UseRdProperty(op: Bool) extends InstProperty(op)
@@ -133,22 +127,10 @@ object NextPcField extends InstEnumField(PcType) {
   override def typeChecker = _.isInstanceOf[NextPcProperty]
 }
 
-case class CtrlControlIEProperty(op: CtrlControlIE.Type) extends InstProperty(op)
-object CtrlControlIEField extends InstEnumField(CtrlControlIE) {
+case class CtrlControlIEProperty(op: FrontendControlIE.Type) extends InstProperty(op)
+object CtrlControlIEField extends InstEnumField(FrontendControlIE) {
   override def name = "decoded jumps"
   override def typeChecker = _.isInstanceOf[CtrlControlIEProperty]
-}
-
-case class LSUControlIEProperty(op: LSUControlIE.Type) extends InstProperty(op)
-object LSUControlIEField extends InstEnumField(LSUControlIE) {
-  override def name = "lsu st/ld/size"
-  override def typeChecker = _.isInstanceOf[LSUControlIEProperty]
-}
-
-case class LSUControlMEProperty(op: LSUControlME.Type) extends InstProperty(op)
-object LSUControlMEField extends InstEnumField(LSUControlME) {
-  override def name = "lsu ld size/sign"
-  override def typeChecker = _.isInstanceOf[LSUControlMEProperty]
 }
 
 case class LsSizeProperty(op: DataSize.Type) extends InstProperty(op)
@@ -247,18 +229,6 @@ object AmoField extends InstEnumField(AMOType) {
   override def typeChecker = _.isInstanceOf[AmoProperty]
 }
 
-case class HazardProperty(op: HazardIE.Type) extends InstProperty(op)
-object HazardField extends InstEnumField(HazardIE) {
-  override def name = "hazard"
-  override def typeChecker = _.isInstanceOf[HazardProperty]
-}
-
-case class HazardLoadProperty(op: HazardME.Type) extends InstProperty(op)
-object HazardLoadField extends InstEnumField(HazardME) {
-  override def name = "hazard for load"
-  override def typeChecker = _.isInstanceOf[HazardLoadProperty]
-}
-
 /**
   * Definitions of Composite properties
   */
@@ -291,7 +261,6 @@ case class LoadCompProperty(lsSize: DataSize.Type, isSigned: SignedControl.Type 
     LoadProperty(LoadControl.EN) ++
     SignedProperty(isSigned) ++
     LsSizeProperty(lsSize) ++
-    W2WritebackProperty(RegXControlME.EN) ++
     UseRdProperty(true.B)
 )
 
@@ -335,7 +304,7 @@ object RV32IDecode extends InstDecode {
       OpCompProperty(OperandType.PC, OperandType.JImmediate) ++
         RdProperty(RdType.ConsecPC) ++
         NextPcProperty(PcType.Alu) ++
-        W1WritebackProperty(RegXControlIE.EN)
+        W1WritebackProperty(W1WritebackIE.EN)
     ),
 
     new InstPattern(JALR,
@@ -363,32 +332,32 @@ object RV32IDecode extends InstDecode {
 
     new InstPattern(CSRRW,
       OpCompProperty(OperandType.Reg, OperandType.None) ++
-        CSRControlProperty(CSRInstMuxIE.RW) ++
+        CSRControlProperty(CSRControl.RW) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRWI,
       OpCompProperty(OperandType.CSRImmmediate, OperandType.None) ++
-        CSRControlProperty(CSRInstMuxIE.RW) ++
+        CSRControlProperty(CSRControl.RW) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRS,
       OpCompProperty(OperandType.Reg, OperandType.None) ++
-        CSRControlProperty(CSRInstMuxIE.RS) ++
+        CSRControlProperty(CSRControl.RS) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRSI,
       OpCompProperty(OperandType.CSRImmmediate, OperandType.None) ++
-        CSRControlProperty(CSRInstMuxIE.RS) ++
+        CSRControlProperty(CSRControl.RS) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRC,
       OpCompProperty(OperandType.Reg, OperandType.None) ++
-        CSRControlProperty(CSRInstMuxIE.RC) ++
+        CSRControlProperty(CSRControl.RC) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRCI,
       OpCompProperty(OperandType.CSRImmmediate, OperandType.None) ++
-        CSRControlProperty(CSRInstMuxIE.RC) ++
+        CSRControlProperty(CSRControl.RC) ++
         RdProperty(RdType.BypassCSR)
     ),
 
