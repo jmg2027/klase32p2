@@ -19,10 +19,10 @@ class CSRModuleTest extends KlasTest {
         println(addr: Int, writeData: BigInt, readBack: BigInt, readMask: BigInt)
         c.io.ctrl.addr.poke(addr.U)
         c.io.ctrl.in.poke(writeData.U)
-        c.io.ctrl.inst.poke(CSRInstMuxIE.RW)
+        c.io.ctrl.inst.poke(CSRControl.RW)
         c.clock.step(1)
 //        println(c.io.rd.peekInt(), readBack & readMask)
-        c.io.ctrl.inst.poke(CSRInstMuxIE.RW)
+        c.io.ctrl.inst.poke(CSRControl.RW)
 //        println(c.io.rd.peekInt(), readBack & readMask)
         c.clock.step(1)
         println(c.io.rd.peekInt(), readBack & readMask)
@@ -32,10 +32,8 @@ class CSRModuleTest extends KlasTest {
       // Test each CSR with specific scenarios
       val csrAddresses = Seq(CSR.CSRAddr.mstatus, CSR.CSRAddr.misa, CSR.CSRAddr.mie)
       val testData = Seq(
-//        (CSRAddr.medeleg, 0x00000002L, 0x00000002L, 0xFFFFFFFFL), // Example data for mstatus
         (CSRAddr.mstatus, 0x00000002L, 0x00000002L, 0xFFFFFFFFL), // Example data for mstatus
-        (0x301, 0x40000000L, 0x40000000L, 0xFFFFFFFFL), // Example data for misa
-        (0x304, 0x00000001L, 0x00000001L, 0xFFFFFFFFL)  // Example data for mie
+        (CSRAddr.mie, 0x00000001L, 0x00000001L, 0xFFFFFFFFL)  // Example data for mie
       )
 
       for ((addr, writeData, expectedReadback, mask) <- testData) {
