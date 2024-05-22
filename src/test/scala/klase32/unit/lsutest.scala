@@ -1,50 +1,53 @@
-package klase32.unit
+package klase32
 
 import chisel3._
 import chiseltest._
-import org.scalatest.flatspec.AnyFlatSpec
+import klas.KlasTest
 import klase32.config._
-import klase32.param.KlasE32ParamKey
-import snitch.enums._
+import klase32.param.DefaultConfig
 
-class LSUTest extends AnyFlatSpec with ChiselScalatestTester {
-  behavior of "LSU"
+class RegisterFileTest extends KlasTest {
+  behavior of "RegisterFile"
 
-  it should "correctly handle different load and store operations" in {
+  it should "correctly handle read and write operations" in {
     implicit val p: Parameters = new DefaultConfig() // Ensure this matches your configuration class
 
-    test(new LSU) { lsu =>
-      // Function to drive tests for load/store operations
-      def testLoadStore(isLoad: Boolean, isStore: Boolean, size: DataSize.Type, signed: SignedControl.Type, addr: BigInt, wrdata: BigInt): Unit = {
-        lsu.io.lsuctrlIE.isLoad.poke(if (isLoad) LoadControl.EN else LoadControl.DIS)
-        lsu.io.lsuctrlIE.isStore.poke(if (isStore) StoreControl.EN else StoreControl.DIS)
-        lsu.io.lsuctrlIE.lsSize.poke(size)
-        lsu.io.lsuctrlIE.isSigned.poke(signed)
-        lsu.io.addr.poke(addr.U)
-        lsu.io.wrdata.poke(wrdata.U)
-        lsu.clock.step(1)
-
-        // Check outputs based on whether it's a load or store
-        if (isLoad) {
-          println(s"Read data for address $addr: ${lsu.io.rddata.peek().litValue}")
-        }
-        if (isStore) {
-          println(s"Write data for address $addr with size $size: $wrdata")
-        }
+    test(new RegisterFile) { rf =>
+      // Helper function to perform a write
+      def writeRegister(index: Int, data: BigInt): Unit = {
+        rf.io.wp(index).valid.poke(true.B)
+        rf.io.wp(index).bits.addr.poke(index.U)
+        rf.io.wp(index).bits.data.poke(data.U)
+        rf.clock.step(1) // Advance the clock to process the write
+        rf.io.wp(index).valid.poke(false.B) // Deassert write valid
       }
 
-      // Example tests
-      // Test a byte load
-      testLoadStore(isLoad = true, isStore = false, size = DataSize.Byte, signed = SignedControl.signed, addr = 0x1000, wrdata = 0)
+      // Helper function to read and check a register
+      def readAndCheck(index: Int, expectedData: BigInt): Unit = {
+        rf.io.rp(index).addr.poke(index.U)
+        rf.clock.step(1) // Advance the clock to ensure read occurs
+        assert(rf.io.rp(index).data.peek().litValue == expectedData, s"Register $index did not have expected value $expectedData")
+      }
 
-      // Test a word store
-      testLoadStore(isLoad = false, isStore = true, size = DataSize.Word, signed = SignedControl.unsigned, addr = 0x1004, wrdata = 0x12345678)
+      // Reset the register file
+      rf.reset.poke(true.B)
+      rf.clock.step(1)
+      rf.reset.poke(false.B)
 
-      // Test handling of a store followed by a load to the same address
-      testLoadStore(isLoad = false, isStore = true, size = DataSize.HalfWord, signed = SignedControl.unsigned, addr = 0x1008, wrdata = 0xABCD)
-      testLoadStore(isLoad = true, isStore = false, size = DataSize.HalfWord, signed = SignedControl.signed, addr = 0x1008, wrdata = 0)
+      // Test Writing to and Reading from registers
+      writeRegister(0, 0x12345678L)
+      writeRegister(1, 0x9abcdef0L)
+      readAndCheck(0, 0x12345678L)
+      readAndCheck(1, 0x9abcdef0L)
 
-      // Further tests can cover edge cases, alignment issues, etc.
+      // Check zero register is always zero
+      readAndCheck(0, 0)
+
+      // Test Writing to zero register has no effect
+      writeRegister(0, 0xFFFFFFFFL)
+      readAndCheck(0, 0)
+
+      // Further tests can include random data tests, concurrent reads and writes, etc.
     }
   }
 }
