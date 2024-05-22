@@ -5,50 +5,82 @@ import chiseltest._
 import klas.KlasTest
 import klase32.config._
 import klase32.param.DefaultConfig
-import klase32.CSR.CSRAddr
+import chisel3.experimental.BundleLiterals._
+import snitch.enums.SnitchEnum
 
-class CSRModuleTest extends KlasTest {
-  behavior of "CSRModule"
+class DecoderTest extends KlasTest {
+  behavior of "Decoder"
 
-  it should "correctly handle read and write operations for various CSRs" in {
+  it should "correctly decode various instruction types" in {
     implicit val p: Parameters = new DefaultConfig() // Ensure this matches your configuration class
 
-    test(new CSRModule) { c =>
-      // Function to test CSR read and write operations
-      def testCSRReadWrite(addr: Int, writeData: BigInt, readBack: BigInt, readMask: BigInt): Unit = {
-        println(addr: Int, writeData: BigInt, readBack: BigInt, readMask: BigInt)
-        c.io.ctrl.addr.poke(addr.U)
-        c.io.ctrl.in.poke(writeData.U)
-        c.io.ctrl.inst.poke(CSRControl.RW)
-        c.clock.step(1)
-//        println(c.io.rd.peekInt(), readBack & readMask)
-        c.io.ctrl.inst.poke(CSRControl.RW)
-//        println(c.io.rd.peekInt(), readBack & readMask)
-        c.clock.step(1)
-        println(c.io.rd.peekInt(), readBack & readMask)
-        c.io.rd.expect((readBack & readMask).U)
+    test(new Decoder) { d =>
+      // Function to test an instruction
+      def testInstruction(inst: UInt, expected: Decoded): Unit = {
+        d.io.inst.poke(inst)
+        d.clock.step() // Simulate a clock cycle
+
+        // Check each field in the Decoded bundle
+        d.io.decSig.imm.i.expect(expected.imm.i)
+        d.io.decSig.imm.u.expect(expected.imm.u)
+        d.io.decSig.imm.j.expect(expected.imm.j)
+        d.io.decSig.imm.b.expect(expected.imm.b)
+        d.io.decSig.imm.s.expect(expected.imm.s)
+
+        d.io.decSig.rd.expect(expected.rd)
+        d.io.decSig.rs1.expect(expected.rs1)
+        d.io.decSig.rs2.expect(expected.rs2)
+
+        d.io.decSig.aluCtrl.expect(expected.aluCtrl)
+        d.io.decSig.csrCtrl.expect(expected.csrCtrl)
+
+        d.io.decSig.ecall.expect(expected.ecall)
+        d.io.decSig.ebreak.expect(expected.ebreak)
+        d.io.decSig.mret.expect(expected.mret)
+
+        d.io.decSig.operandSelect.a.expect(expected.operandSelect.a)
+        d.io.decSig.operandSelect.b.expect(expected.operandSelect.b)
+
+        d.io.decSig.lsuCtrl.lsSize.expect(expected.lsuCtrl.lsSize)
+        d.io.decSig.lsuCtrl.isLoad.expect(expected.lsuCtrl.isLoad)
+        d.io.decSig.lsuCtrl.isStore.expect(expected.lsuCtrl.isStore)
+        d.io.decSig.lsuCtrl.isSigned.expect(expected.lsuCtrl.isSigned)
+
+        // Additional checks for any other necessary fields
       }
 
-      // Test each CSR with specific scenarios
-      val csrAddresses = Seq(CSR.CSRAddr.mstatus, CSR.CSRAddr.misa, CSR.CSRAddr.mie)
-      val testData = Seq(
-        (CSRAddr.mstatus, 0x00000002L, 0x00000002L, 0xFFFFFFFFL), // Example data for mstatus
-        (CSRAddr.mie, 0x00000001L, 0x00000001L, 0xFFFFFFFFL)  // Example data for mie
-      )
 
-      for ((addr, writeData, expectedReadback, mask) <- testData) {
-        testCSRReadWrite(addr, writeData, expectedReadback, mask)
+      val el = (new Decoded).elements
+      val expectedDefaultValue = (new Decoded).elements.map {
+        case(k, v) =>
+          v match {
+            case _: UInt => k -> 0.U(v.getWidth.W)
+            case _: SInt => k -> 0.S(v.getWidth.W)
+            case _: EnumType => k -> v
+            case _: Bundle => k -> v.asInstanceOf[Bundle].elements
+            case _ => k -> "Not matched"
+          }
       }
+      println(expectedDefaultValue)
+//      println(el)
+//      print(Map("wfi" -> el("wfi").asInstanceOf[ControlEnum].default))
+//      print(Map("wfi" -> el("wfi").asInstanceOf[ChiselEnum]))
+//      println(IllegalInstIE.default)
 
-      // Special cases for exceptions and interrupts
-      c.io.exception.poke(true.B)
-      c.io.cause.poke(0x04.U) // Example cause
-      c.io.epc.poke(0x1000.U)
-      c.io.ctrl.addr.poke(CSR.CSRAddr.mcause) // Testing exception capture
-      c.clock.step(1)
-      c.io.rd.expect(0x04.U) // Check if mcause was correctly captured
+      // Example test case for an ADD instruction (R-type)
+      val addInst = "b0000000_00001_00010_000_00011_0110011".U // ADD x3, x1, x2
+//      val expectedAddDecoding = new Decoded {
+//        imm.i := 0.S; imm.u := 0.S; imm.j := 0.S; imm.b := 0.S; imm.s := 0.S
+//        rd := 3.U; rs1 := 1.U; rs2 := 2.U
+//        aluCtrl := ALUControlIE.ADD
+//        csrCtrl := CSRControl.default
+//        // Set other fields as expected
+//      }.Lit()
 
-      // More scenarios for interrupts, ebreak, mret, etc.
+//      testInstruction(addInst, expectedAddDecoding)
+
+      // Additional test cases for I-type, S-type, B-type, U-type, J-type instructions
+      // You can add a function to simplify instruction encoding if necessary
     }
   }
 }
