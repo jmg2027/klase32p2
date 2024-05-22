@@ -1,12 +1,12 @@
-package klase32.unit
+package klase32
 
 import chisel3._
 import chiseltest._
-import org.scalatest.flatspec.AnyFlatSpec
+import klas.KlasTest
 import klase32.config._
-import klase32.param.KlasE32ParamKey
+import klase32.param.DefaultConfig
 
-class RegisterFileTest extends AnyFlatSpec with ChiselScalatestTester {
+class RegisterFileTest extends KlasTest {
   behavior of "RegisterFile"
 
   it should "correctly handle read and write operations" in {
@@ -35,16 +35,16 @@ class RegisterFileTest extends AnyFlatSpec with ChiselScalatestTester {
       rf.reset.poke(false.B)
 
       // Test Writing to and Reading from registers
-      writeRegister(1, 0x12345678)
-      writeRegister(2, 0x9abcdef0)
-      readAndCheck(1, 0x12345678)
-      readAndCheck(2, 0x9abcdef0)
+      writeRegister(0, 0x12345678L)
+      writeRegister(1, 0x9abcdef0L)
+      readAndCheck(0, 0x12345678L)
+      readAndCheck(1, 0x9abcdef0L)
 
       // Check zero register is always zero
       readAndCheck(0, 0)
 
       // Test Writing to zero register has no effect
-      writeRegister(0, 0xFFFFFFFF)
+      writeRegister(0, 0xFFFFFFFFL)
       readAndCheck(0, 0)
 
       // Further tests can include random data tests, concurrent reads and writes, etc.
