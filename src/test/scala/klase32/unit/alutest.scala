@@ -9,27 +9,37 @@ import klase32.param.DefaultConfig
 class ALUTest extends KlasTest {
   implicit val p = new DefaultConfig
 
-  def asUnsigned(x: Long) = {
-    val prefix: Array[Byte] = Array(0)
-    val byteArr = Seq.tabulate(4) { i =>
-      ((x >> (i * 8)) & 0xFF).toByte
-    }.reverse
-    BigInt(prefix ++ byteArr)
-  }
-
   behavior of "ALU"
 
   it should "perform various operations correctly under diverse scenarios" in {
-    test(new ALU) { c =>
+    test(new ALU) { dut =>
       // Function to test ALU operations
       def testALUOperation(op: ALUControlIE.Type, a: Int, b: Int, expected: Option[Int], expectFlag: Option[Boolean] = None): Unit = {
-        c.io.ctrl.poke(op)
-        c.io.A.poke(Integer.toUnsignedLong(a).U(32.W))
-        c.io.B.poke(Integer.toUnsignedLong(b).U(32.W))
+        dut.io.ctrl.poke(op)
+        dut.io.A.poke(Integer.toUnsignedLong(a).U(32.W))
+        dut.io.B.poke(Integer.toUnsignedLong(b).U(32.W))
         // deal with option type
-        expectFlag.foreach(flag => c.io.F.expect(flag.B))
-        expected.foreach(expected => c.io.R.expect(Integer.toUnsignedLong(expected).U(32.W)))
-        c.clock.step()
+        expectFlag.foreach(flag => dut.io.F.expect(flag.B))
+        expected.foreach(expected => dut.io.R.expect(Integer.toUnsignedLong(expected).U(32.W)))
+        dut.clock.step()
+      }
+
+      def getExpectedAndFlag(op: ALUControlIE.Type, a: Int, b: Int): (Option[Int], Option[Boolean]) = op match {
+        case ALUControlIE.ADD => (Some(a + b), None)
+        case ALUControlIE.SUB => (Some(a - b), None)
+        case ALUControlIE.SLL => (Some(a << (b & 31)), None)
+        case ALUControlIE.SRL => (Some(a >>> (b & 31)), None)
+        case ALUControlIE.SRA => (Some(a >> (b & 31)), None)
+        case ALUControlIE.AND => (Some(a & b), None)
+        case ALUControlIE.OR  => (Some(a | b), None)
+        case ALUControlIE.XOR => (Some(a ^ b), None)
+        case ALUControlIE.EQ  => (None, Some(a == b))
+        case ALUControlIE.NE  => (None, Some(a != b))
+        case ALUControlIE.LTU => (None, Some(Integer.toUnsignedLong(a) < Integer.toUnsignedLong(b)))
+        case ALUControlIE.LT  => (None, Some(a < b))
+        case ALUControlIE.GEU => (None, Some(Integer.toUnsignedLong(a) >= Integer.toUnsignedLong(b)))
+        case ALUControlIE.GE  => (None, Some(a >= b))
+        case _ => (Some(0), None)
       }
 
       // Testing each operation with multiple scenarios
@@ -54,24 +64,18 @@ class ALUTest extends KlasTest {
 
       for ((op, vals) <- operations.flatMap(op => testValues.map(vals => (op, vals)))) {
         val (a, b) = vals
-        val (expected, expectFlag): (Option[Int], Option[Boolean]) = op match {
-          case ALUControlIE.ADD => (Some(a + b), None)
-          case ALUControlIE.SUB => (Some(a - b), None)
-          case ALUControlIE.SLL => (Some(a << (b & 31)), None)
-          case ALUControlIE.SRL => (Some(a >>> (b & 31)), None)
-          case ALUControlIE.SRA => (Some(a >> (b & 31)), None)
-          case ALUControlIE.AND => (Some(a & b), None)
-          case ALUControlIE.OR  => (Some(a | b), None)
-          case ALUControlIE.XOR => (Some(a ^ b), None)
-          case ALUControlIE.EQ  => (None, Some(if (a == b) true else false))
-          case ALUControlIE.NE  => (None, Some(if (a != b) true else false))
-          case ALUControlIE.LTU => (None, Some(if (Integer.toUnsignedLong(a) < Integer.toUnsignedLong(b)) true else false))
-          case ALUControlIE.LT  => (None, Some(if (a < b) true else false))
-          case ALUControlIE.GEU => (None, Some(if (Integer.toUnsignedLong(a) >= Integer.toUnsignedLong(b)) true else false))
-          case ALUControlIE.GE  => (None, Some(if (a >= b) true else false))
-          case _ => (Some(0), None)
-        }
+        val (expected, expectFlag) = getExpectedAndFlag(op, a, b)
         testALUOperation(op, a, b, expected, expectFlag)
+      }
+
+      // Adding random tests
+      for (_ <- 0 until 100) {
+        val a = Random.nextInt()
+        val b = Random.nextInt()
+        for (op <- operations) {
+          val (expected, expectFlag) = getExpectedAndFlag(op, a, b)
+          testALUOperation(op, a, b, expected, expectFlag)
+        }
       }
     }
   }

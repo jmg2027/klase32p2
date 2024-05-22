@@ -47,7 +47,12 @@ class RegisterFileTest extends KlasTest {
       writeRegister(0, 0xFFFFFFFFL)
       readAndCheck(0, 0)
 
-      // Further tests can include random data tests, concurrent reads and writes, etc.
+      // Test all registers
+      for (addr <- 1 until regNum) {
+        val testData = addr * 2
+        writeRegister(addr, testData)
+        readAndCheck(addr, testData)
+      }
     }
   }
 }

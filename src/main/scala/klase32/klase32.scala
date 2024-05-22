@@ -4,13 +4,10 @@ import chisel3._
 import chisel3.util._
 import chisel3.util.BitPat.bitPatToUInt
 import klase32.config._
-import klase32.param.KLASE32ParamKey
 import snitch.enums.{OperandType, RdType}
 import freechips.rocketchip.rocket.Causes
 
 class KLASE32IO(implicit p: Parameters) extends Bundle with KLASE32IOEtc {
-  val k = p(KLASE32ParamKey)
-
   //  val acc = new Acc.Interface
   val interrupt = Input(new Interrupt)
   val edm = new EdmIntf
@@ -58,8 +55,10 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   stallSig.me.wfi := csr.io.wfiOut
   stallSig.me.hzd := hzd.io.stall
   stallSig.me.fence := ctrlSig.fence.asUInt.orR && !(lsu.io.loadFull || lsu.io.storeFull)
-  val stallIE = stallSig.ie.orR
-  val stallME = stallSig.me.orR
+  // val stallIE = stallSig.ie.orR
+  // val stallME = stallSig.me.orR
+  val stallIE = stallSig.ie.asUInt.orR
+  val stallME = stallSig.me.asUInt.orR
   val stall = stallIE && stallME
 
 

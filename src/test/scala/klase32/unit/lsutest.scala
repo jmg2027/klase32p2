@@ -14,37 +14,113 @@ class LSUTest extends KlasTest {
     implicit val p: Parameters = new DefaultConfig() // Ensure this matches your configuration class
 
     test(new LSU) { lsu =>
-      // Function to drive tests for load/store operations
-      def testLoadStore(isLoad: Boolean, isStore: Boolean, size: DataSize.Type, signed: SignedControl.Type, addr: BigInt, wrdata: BigInt): Unit = {
-        lsu.io.lsuctrlIE.isLoad.poke(if (isLoad) LoadControl.EN else LoadControl.default)
-        lsu.io.lsuctrlIE.isStore.poke(if (isStore) StoreControl.EN else StoreControl.default)
-        lsu.io.lsuctrlIE.lsSize.poke(size)
-        lsu.io.lsuctrlIE.isSigned.poke(signed)
-        lsu.io.addr.poke(addr.U)
-        lsu.io.wrdata.poke(wrdata.U)
-        lsu.clock.step(1)
-
-        // Check outputs based on whether it's a load or store
-        if (isLoad) {
-          println(s"Read data for address $addr: ${lsu.io.rddata.peek().litValue}")
+        // Function to perform store operation
+        def performStore(addr: UInt, data: UInt, size: UInt): Unit = {
+          poke(c.io.addr, addr)
+          poke(c.io.wrdata, data)
+          poke(c.io.lsuctrlIE.lsSize, size)
+          poke(c.io.lsuctrlIE.isStore, true.B)
+          val alignedAddr = (addr >> 2) << 2 // Align address to 4 bytes
+          val offset = addr(1, 0)
+          val expectedMask = size match {
+            case DataSize.Byte => ("b0001".U << offset)
+            case DataSize.HalfWord => ("b0011".U << offset)
+            case DataSize.Word => "b1111".U
+          }
+          expect(c.io.storeFull, false.B)
+          expect(c.io.edm.st_req, true.B)
+          expect(c.io.edm.st_paddr, alignedAddr)
+          expect(c.io.edm.st_mask, expectedMask)
+          poke(c.io.lsuctrlIE.isStore, false.B)
         }
-        if (isStore) {
-          println(s"Write data for address $addr with size $size: $wrdata")
+
+        // Function to perform load operation
+        def performLoad(addr: UInt, rdata: UInt, size: UInt, isSigned: Bool, expectedData: UInt): Unit = {
+          poke(c.io.addr, addr)
+          poke(c.io.lsuctrlIE.lsSize, size)
+          poke(c.io.lsuctrlIE.isLoad, true.B)
+          poke(c.io.lsuctrlIE.isSigned, isSigned)
+          step(1)
+          val alignedAddr = (addr >> 2) << 2 // Align address to 4 bytes
+          val offset = addr(1, 0)
+          val shiftedData = rdata >> (offset << 3)
+          val slicedData = size match {
+            case DataSize.Byte => shiftedData(7, 0)
+            case DataSize.HalfWord => shiftedData(15, 0)
+            case DataSize.Word => shiftedData
+          }
+          val signedData = if (isSigned.litToBoolean) slicedData.asSInt else slicedData.asUInt
+          poke(c.io.edm.ld_ack, true.B)  // DM acknowledges the load request
+          poke(c.io.edm.ld_rdata, rdata)
+          expect(c.io.loadFull, false.B)
+          expect(c.io.rddata, signedData)
+          poke(c.io.lsuctrlIE.isLoad, false.B)
+          poke(c.io.edm.ld_ack, false.B)
         }
-      }
 
-      // Example tests
-      // Test a byte load
-      testLoadStore(isLoad = true, isStore = false, size = DataSize.Byte, signed = SignedControl.signed, addr = 0x1000, wrdata = 0)
+        // Function to calculate expected data based on size and offset
+        def calculateExpectedData(data: UInt, addr: UInt, size: UInt, isSigned: Bool): UInt = {
+          val offset = addr(1, 0)
+          val expectedData = size match {
+            case DataSize.Byte =>
+              val byteData = (data >> (offset * 8)) & 0xFF.U
+              if (isSigned.litToBoolean) byteData.zext() else byteData
+            case DataSize.HalfWord =>
+              val halfWordData = (data >> (offset & 1.U) * 16) & 0xFFFF.U
+              if (isSigned.litToBoolean) halfWordData.zext() else halfWordData
+            case DataSize.Word => data
+          }
+          expectedData
+        }
 
-      // Test a word store
-      testLoadStore(isLoad = false, isStore = true, size = DataSize.Word, signed = SignedControl.unsigned, addr = 0x1004, wrdata = 0x12345678)
 
-      // Test handling of a store followed by a load to the same address
-      testLoadStore(isLoad = false, isStore = true, size = DataSize.HalfWord, signed = SignedControl.unsigned, addr = 0x1008, wrdata = 0xABCD)
-      testLoadStore(isLoad = true, isStore = false, size = DataSize.HalfWord, signed = SignedControl.signed, addr = 0x1008, wrdata = 0)
+        // Function to run random tests
+        def runRandomTests(numTests: Int): Unit = {
+          val rand = new Random()
+          for (_ <- 0 until numTests) {
+            val addr = (rand.nextLong() & 0xFFFFFFFFL).U
+            val data = rand.nextInt().U
+            val size = rand.nextInt(3) match {
+              case 0 => DataSize.Byte
+              case 1 => DataSize.HalfWord
+              case 2 => DataSize.Word
+            }
+            val isSigned = rand.nextBoolean().B
 
-      // Further tests can cover edge cases, alignment issues, etc.
+            // Perform store
+            performStore(addr, data, size)
+
+            // Generate a random 32-bit data for the load
+            val rdata = rand.nextInt().U
+            val expectedData = calculateExpectedData(rdata, addr, size, isSigned)
+
+            // Perform load
+            performLoad(addr, rdata, size, isSigned, expectedData)
+          }
+        }
+
+        val testAddrs = Seq(0x1000.U, 0x1001.U, 0x1002.U, 0x1003.U, 0x1004.U)
+        val testData = Seq(0xAB.U, 0x1234.U, 0x5678ABCD.U)
+        val sizes = Seq(DataSize.Byte, DataSize.HalfWord, DataSize.Word)
+        val signedOptions = Seq(true.B, false.B)
+
+        for (addr <- testAddrs) {
+          for (data <- testData) {
+            for (size <- sizes) {
+              for (isSigned <- signedOptions) {
+                performStore(addr, data, size)
+
+                val rdata = 0x5678ABCD.U // 32-bit data that will be used for the load
+                val expectedData = calculateExpectedData(rdata, addr, size, isSigned)
+                performLoad(addr, rdata, size, isSigned, expectedData)
+              }
+            }
+          }
+        }
+
+        // Run random tests
+        runRandomTests(100)
+
     }
   }
 }

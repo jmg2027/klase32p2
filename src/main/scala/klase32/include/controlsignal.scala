@@ -4,7 +4,6 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
-import klase32.param.KLASE32ParamKey
 import snitch.enums.SnitchEnum
 
 trait ControlEnum extends SnitchEnum
@@ -12,11 +11,6 @@ trait ControlDefaultEnum extends ControlEnum { val default = Value }	// zero def
 trait ControlDefaultEnableEnum extends ControlDefaultEnum {
   val EN = Value
 }	// default with enable only
-
-class ALUControlIE {
-  // does this work?
-  def isSub = this.asInstanceOf[UInt](4)
-}
 
 object ALUControlIE extends ControlDefaultEnum {
   val AND = Value	// aluR 00001

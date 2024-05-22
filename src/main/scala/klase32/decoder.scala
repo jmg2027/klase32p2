@@ -6,7 +6,6 @@ import chisel3.util._
 import chisel3.util.experimental.decode.{DecodeField, DecodePattern, DecodeTable}
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
-import klase32.param.KLASE32ParamKey
 import klase32.Instructions._
 import snitch.enums._
 
@@ -63,8 +62,6 @@ class DecoderIO(implicit p: Parameters) extends CoreBundle {
 }
 
 class Decoder(implicit p: Parameters) extends CoreModule {
-  val k = p(KLASE32ParamKey)
-
   val io = IO(new DecoderIO)
 
   val d = io.decSig

@@ -3,7 +3,6 @@ package klase32
 import chisel3._
 import chisel3.util._
 import klase32.config._
-import klase32.param.KLASE32ParamKey
 import chisel3.experimental.BundleLiterals._
 
 

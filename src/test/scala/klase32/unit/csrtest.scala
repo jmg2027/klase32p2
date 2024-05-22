@@ -5,82 +5,93 @@ import chiseltest._
 import klas.KlasTest
 import klase32.config._
 import klase32.param.DefaultConfig
-import chisel3.experimental.BundleLiterals._
-import snitch.enums.SnitchEnum
+import klase32.CSR.CSRAddr
 
-class DecoderTest extends KlasTest {
-  behavior of "Decoder"
+class CSRModuleTest extends KlasTest {
+  behavior of "CSRModule"
 
-  it should "correctly decode various instruction types" in {
+  it should "correctly handle read and write operations for various CSRs" in {
     implicit val p: Parameters = new DefaultConfig() // Ensure this matches your configuration class
 
-    test(new Decoder) { d =>
-      // Function to test an instruction
-      def testInstruction(inst: UInt, expected: Decoded): Unit = {
-        d.io.inst.poke(inst)
-        d.clock.step() // Simulate a clock cycle
+    test(new CSRModule) { dut =>
+      // Function to test CSR read and write operations
+          test(new CSRTest) { c =>
+      def testCSRField(addr: UInt, fieldName: String, default: UInt) {
+        // Initial read should be the default value
+        c.io.ctrl.addr.poke(addr)
+        c.io.ctrl.inst.poke(CSRControl.RW)
+        c.io.ctrl.in.poke(default)
+        c.clock.step(1)
+        c.io.rd.expect(default)
 
-        // Check each field in the Decoded bundle
-        d.io.decSig.imm.i.expect(expected.imm.i)
-        d.io.decSig.imm.u.expect(expected.imm.u)
-        d.io.decSig.imm.j.expect(expected.imm.j)
-        d.io.decSig.imm.b.expect(expected.imm.b)
-        d.io.decSig.imm.s.expect(expected.imm.s)
+        // Write to the CSR field using CSRRW
+        val newValue = 0xdeadbeefL.U
+        c.io.ctrl.in.poke(newValue)
+        c.io.ctrl.inst.poke(CSRControl.RW)
+        c.clock.step(1)
+        c.io.rd.expect(default) // Should read old value before write
+        c.io.ctrl.inst.poke(CSRControl.RS)
+        c.io.rd.expect(newValue) // After write, it should reflect the new value
 
-        d.io.decSig.rd.expect(expected.rd)
-        d.io.decSig.rs1.expect(expected.rs1)
-        d.io.decSig.rs2.expect(expected.rs2)
+        // Set up another value to test CSRRS (set bits)
+        val setBits = 0x00000001L.U
+        c.io.ctrl.in.poke(setBits)
+        c.io.ctrl.inst.poke(CSRControl.RS)
+        c.clock.step(1)
+        c.io.rd.expect(newValue) // RS should read the old value
+        c.io.ctrl.inst.poke(CSRControl.RS)
+        c.io.rd.expect(newValue | setBits) // Set bits operation
 
-        d.io.decSig.aluCtrl.expect(expected.aluCtrl)
-        d.io.decSig.csrCtrl.expect(expected.csrCtrl)
-
-        d.io.decSig.ecall.expect(expected.ecall)
-        d.io.decSig.ebreak.expect(expected.ebreak)
-        d.io.decSig.mret.expect(expected.mret)
-
-        d.io.decSig.operandSelect.a.expect(expected.operandSelect.a)
-        d.io.decSig.operandSelect.b.expect(expected.operandSelect.b)
-
-        d.io.decSig.lsuCtrl.lsSize.expect(expected.lsuCtrl.lsSize)
-        d.io.decSig.lsuCtrl.isLoad.expect(expected.lsuCtrl.isLoad)
-        d.io.decSig.lsuCtrl.isStore.expect(expected.lsuCtrl.isStore)
-        d.io.decSig.lsuCtrl.isSigned.expect(expected.lsuCtrl.isSigned)
-
-        // Additional checks for any other necessary fields
+        // Set up another value to test CSRRC (clear bits)
+        val clearBits = 0x00000001L.U
+        c.io.ctrl.in.poke(clearBits)
+        c.io.ctrl.inst.poke(CSRControl.RC)
+        c.clock.step(1)
+        c.io.rd.expect(newValue | setBits) // RC should read the current value
+        c.io.ctrl.inst.poke(CSRControl.RC)
+        c.io.rd.expect((newValue | setBits) & (~clearBits).asUInt) // Clear bits operation
       }
 
+      // Test for each CSR field
+      testCSRField(CSR.CSRAddr.mstatus.U, "mstatus", 0.U)
+      testCSRField(CSR.CSRAddr.mstatush.U, "mstatush", 0.U)
+      testCSRField(CSR.CSRAddr.misa.U, "misa", 0.U)
+      testCSRField(CSR.CSRAddr.medeleg.U, "medeleg", 0.U)
+      testCSRField(CSR.CSRAddr.mideleg.U, "mideleg", 0.U)
+      testCSRField(CSR.CSRAddr.mie.U, "mie", 0.U)
+      testCSRField(CSR.CSRAddr.mtvec.U, "mtvec", 0.U)
+      testCSRField(CSR.CSRAddr.mvendorid.U, "mvendorid", 0.U)
+      testCSRField(CSR.CSRAddr.marchid.U, "marchid", 0.U)
+      testCSRField(CSR.CSRAddr.mimpid.U, "mimpid", 0.U)
+      testCSRField(CSR.CSRAddr.mhartid.U, "mhartid", 0.U)
+      testCSRField(CSR.CSRAddr.mscratch.U, "mscratch", 0.U)
+      testCSRField(CSR.CSRAddr.mepc.U, "mepc", 0.U)
+      testCSRField(CSR.CSRAddr.mcause.U, "mcause", 0.U)
+      testCSRField(CSR.CSRAddr.mtval.U, "mtval", 0.U)
+      testCSRField(CSR.CSRAddr.mip.U, "mip", 0.U)
+      testCSRField(CSR.CSRAddr.mconfigptr.U, "mconfigptr", 0.U)
+      testCSRField(CSR.CSRAddr.menvcfg.U, "menvcfg", 0.U)
+      testCSRField(CSR.CSRAddr.menvcfgh.U, "menvcfgh", 0.U)
+      testCSRField(CSR.CSRAddr.mseccfg.U, "mseccfg", 0.U)
+    }
 
-      val el = (new Decoded).elements
-      val expectedDefaultValue = (new Decoded).elements.map {
-        case(k, v) =>
-          v match {
-            case _: UInt => k -> 0.U(v.getWidth.W)
-            case _: SInt => k -> 0.S(v.getWidth.W)
-            case _: EnumType => k -> v
-            case _: Bundle => k -> v.asInstanceOf[Bundle].elements
-            case _ => k -> "Not matched"
-          }
-      }
-      println(expectedDefaultValue)
-//      println(el)
-//      print(Map("wfi" -> el("wfi").asInstanceOf[ControlEnum].default))
-//      print(Map("wfi" -> el("wfi").asInstanceOf[ChiselEnum]))
-//      println(IllegalInstIE.default)
 
-      // Example test case for an ADD instruction (R-type)
-      val addInst = "b0000000_00001_00010_000_00011_0110011".U // ADD x3, x1, x2
-//      val expectedAddDecoding = new Decoded {
-//        imm.i := 0.S; imm.u := 0.S; imm.j := 0.S; imm.b := 0.S; imm.s := 0.S
-//        rd := 3.U; rs1 := 1.U; rs2 := 2.U
-//        aluCtrl := ALUControlIE.ADD
-//        csrCtrl := CSRControl.default
-//        // Set other fields as expected
-//      }.Lit()
+      // Exception handling
+      dut.io.exception.poke(true.B)
+      dut.io.cause.poke(0x04.U) // Example cause
+      dut.io.epc.poke(0x1000.U)
+      dut.io.ctrl.addr.poke(CSR.CSRAddr.mcause) // Testing exception capture
+      dut.clock.step(1)
+      dut.io.rd.expect(0x04.U) // Check if mcause was correctly captured
 
-//      testInstruction(addInst, expectedAddDecoding)
+      // Interrupt handling
+      c.io.interrupt.e.poke(true.B)
+      c.io.interrupt.t.poke(true.B)
+      c.io.interrupt.s.poke(true.B)
+      c.clock.step(1)
+      c.io.interruptPending.expect(true.B)
+      c.io.interruptCause.expect(11.U) // Check if interrupt cause was correctly captured
 
-      // Additional test cases for I-type, S-type, B-type, U-type, J-type instructions
-      // You can add a function to simplify instruction encoding if necessary
     }
   }
 }

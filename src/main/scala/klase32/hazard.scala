@@ -4,12 +4,9 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
-import klase32.param.KLASE32ParamKey
 
 
 class Hazards(implicit p: Parameters) extends CoreModule {
-  val k = p(KLASE32ParamKey)
-
   val io = IO(new Bundle{
     val rs1Valid = Input(Bool())
     val rs2Valid = Input(Bool())

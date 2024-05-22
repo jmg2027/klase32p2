@@ -120,7 +120,7 @@ class EpmIntf(implicit p: Parameters) extends CoreBundle {
  val xcpt = Input(new HeartXcpt)
 }
 
-class FetchQueueIntf(implicit p: Parameters) extends CoreBundle {
+class FetchQueueEntry(implicit p: Parameters) extends CoreBundle {
  val k = p(KlasE32ParamKey)
 
  val data = UInt(k.fetchWidth.W)

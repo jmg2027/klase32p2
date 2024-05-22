@@ -12,51 +12,108 @@ class FrontendTest extends KlasTest {
 
   it should "correctly handle control flows and fetch operations" in {
     test(new Frontend) { c =>
-      // Function to simulate a single clock cycle of operation
-      def simulateCycle(ctrlSignal: FrontendControlIE.Type, pc: BigInt, evec: BigInt, cnd: Boolean, exception: Boolean, eret: Boolean, stall: Boolean, divBusy: Boolean, aluR: BigInt): Unit = {
-        c.io.ctrl.poke(ctrlSignal)
-        c.io.if_pc.poke(pc.U)
-        c.io.evec.poke(evec.U)
-        c.io.cnd.poke(cnd.B)
-        c.io.exception.poke(exception.B)
-        c.io.eret.poke(eret.B)
-        c.io.stall.poke(stall.B)
-        c.io.divBusy.poke(divBusy.B)
-        c.io.aluR.poke(aluR.U)
-        c.clock.step(1) // Advance the clock to process the inputs
-        println(c.io.issue.peekBoolean())
-        println(c.io.pcRegWrite.valid.peekBoolean())
-        println(c.io.pcRegWrite.bits.peekInt())
-        println(c.io.epm.elements.map {
-          case (k, v) =>
-            k -> v.peek()
-//            v match {
-//            case _: UInt => v.asUInt.peek()
-//            case _: Bool => v.asBool.peek()
-//            case _ => v
-//          }
-        }
-        )
-      }
+            // Initialize all input signals to 0
+      dut.io.ctrl.poke(0.U)
+      dut.io.if_pc.poke(0.U)
+      dut.io.evec.poke(0.U)
+      dut.io.cnd.poke(false.B)
+      dut.io.exception.poke(false.B)
+      dut.io.eret.poke(false.B)
+      dut.io.divBusy.poke(false.B)
+      dut.io.stall.poke(false.B)
+      dut.io.aluR.poke(0.U)
+      dut.io.flushEn.poke(0.U.asTypeOf(new IcacheFlushIE))
+      dut.io.epm.bootAddr.poke(0.U)
+      dut.io.epm.data.poke(0.U)
+      dut.io.epm.xcpt.poke(0.U.asTypeOf(new HeartXcpt))
 
-      // Initial Conditions
-      c.reset.poke(true.B)
-      simulateCycle(FrontendControlIE.default, 0x1000, 0x0, cnd = false, exception = false, eret = false, stall = false, divBusy = false, 0x0)
-      c.reset.poke(false.B)
+      // Set initial fetchPC to boot address
+      val bootAddr = 0x1000
+      dut.io.epm.bootAddr.poke(bootAddr.U)
 
-      // Test basic fetch
-      simulateCycle(FrontendControlIE.default, 0x1000, 0x0, cnd = false, exception = false, eret = false, stall = false, divBusy = false, 0x0)
+      // Cycle 1: Reset active
+      dut.reset.poke(true.B)
+      dut.clock.step(1)
+      dut.reset.poke(false.B)
+      dut.io.epm.req.expect(false.B)
+      dut.io.epm.addr.expect(bootAddr.U)
 
-      // Test branching
-      simulateCycle(FrontendControlIE.BR, 0x1000, 0x0, cnd = true, exception = false, eret = false, stall = false, divBusy = false, 0x1040)
+      // Cycle 2: Normal fetch
+      dut.io.epm.ack.poke(true.B) // ACK from epm
+      dut.clock.step(1)
+      dut.io.pcRegWrite.valid.expect(true.B)
+      dut.io.pcRegWrite.bits.expect((bootAddr + 4).U) // Next PC after boot address
+      dut.io.epm.req.expect(true.B) // EPM request should be true
+      dut.io.epm.addr.expect(bootAddr.U + 4.U)
 
-      // Test stall conditions
-      simulateCycle(FrontendControlIE.default, 0x1040, 0x0, cnd = false, exception = false, eret = false, stall = true, divBusy = false, 0x1040)
+      // Cycle 3: Exception handling
+      dut.io.exception.poke(true.B)
+      dut.io.evec.poke(0x2000.U) // Exception vector address
+      dut.clock.step(1)
+      dut.io.pcRegWrite.valid.expect(true.B)
+      dut.io.pcRegWrite.bits.expect(0x2000.U)
+      dut.io.epm.req.expect(true.B) // EPM request should be true after exception
+      dut.io.epm.addr.expect(0x2000.U)
+      dut.io.exception.poke(false.B)
 
-      // Test exception handling
-      simulateCycle(FrontendControlIE.default, 0x1040, 0x2000, cnd = false, exception = true, eret = false, stall = false, divBusy = false, 0x1040)
+      // Cycle 4: Jump handling (JAL)
+      dut.io.ctrl.poke(FrontendControlIE.JAL)
+      dut.io.aluR.poke(0x3000.U) // Jump address
+      dut.io.cnd.poke(true.B)
+      dut.clock.step(1)
+      dut.io.pcRegWrite.valid.expect(true.B)
+      dut.io.pcRegWrite.bits.expect(0x3000.U)
+      dut.io.epm.req.expect(true.B) // EPM request should be true after jump
+      dut.io.epm.addr.expect(0x3000.U)
+      dut.io.ctrl.poke(0.U)
 
-      // Additional scenarios to cover jumps, eret, flushes, and interrupts
+      // Cycle 5: Branch handling (BR)
+      dut.io.ctrl.poke(FrontendControlIE.BR)
+      dut.io.aluR.poke(0x4000.U) // Branch target address
+      dut.io.cnd.poke(true.B)    // Condition met
+      dut.clock.step(1)
+      dut.io.pcRegWrite.valid.expect(true.B)
+      dut.io.pcRegWrite.bits.expect(0x4000.U)
+      dut.io.epm.req.expect(true.B) // EPM request should be true after branch
+      dut.io.epm.addr.expect(0x4000.U)
+      dut.io.ctrl.poke(0.U)
+
+      // Cycle 6: JALR handling
+      dut.io.ctrl.poke(FrontendControlIE.JALR)
+      dut.io.aluR.poke(0x5000.U) // JALR target address
+      dut.clock.step(1)
+      dut.io.pcRegWrite.valid.expect(true.B)
+      dut.io.pcRegWrite.bits.expect(0x5000.U)
+      dut.io.epm.req.expect(true.B) // EPM request should be true after JALR
+      dut.io.epm.addr.expect(0x5000.U)
+      dut.io.ctrl.poke(0.U)
+
+      // Cycle 7: Normal fetch with stall
+      dut.io.stall.poke(true.B)
+      dut.clock.step(1)
+      dut.io.pcRegWrite.valid.expect(false.B)
+      dut.io.epm.req.expect(false.B) // EPM request should be false during stall
+      dut.io.stall.poke(false.B)
+
+      // Cycle 8: Normal fetch with issue
+      dut.io.epm.data.poke(0x12345678.U)
+      dut.io.epm.ack.poke(true.B)
+      dut.clock.step(1)
+      dut.io.pcRegWrite.valid.expect(true.B)
+      dut.io.instPacket.inst.expect(0x12345678.U)
+      dut.io.epm.req.expect(true.B)
+      dut.io.epm.addr.expect((bootAddr + 8).U) // Fetch address should be updated correctly
+
+      // Cycle 9: Handling eret
+      dut.io.eret.poke(true.B)
+      dut.io.evec.poke(0x6000.U)
+      dut.clock.step(1)
+      dut.io.pcRegWrite.valid.expect(true.B)
+      dut.io.pcRegWrite.bits.expect(0x6000.U)
+      dut.io.epm.req.expect(true.B) // EPM request should be true after eret
+      dut.io.epm.addr.expect(0x6000.U)
+      dut.io.eret.poke(false.B)
+
     }
   }
 }
