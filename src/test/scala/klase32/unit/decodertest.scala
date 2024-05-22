@@ -6,9 +6,9 @@ import klas.KlasTest
 import klase32.config._
 import klase32.param.DefaultConfig
 import chisel3.experimental.BundleLiterals._
+import snitch.enums.SnitchEnum
 
 class DecoderTest extends KlasTest {
-  type T <: ControlEnum
   behavior of "Decoder"
 
   it should "correctly decode various instruction types" in {
@@ -53,16 +53,19 @@ class DecoderTest extends KlasTest {
       val el = (new Decoded).elements
       val expectedDefaultValue = (new Decoded).elements.map {
         case(k, v) =>
-          val classOfV = v.getClass
-          if (v.isInstanceOf[T]) (k -> v.getClass.default)
-          else (k -> "no enum")
-
+          v match {
+            case _: UInt => k -> 0.U(v.getWidth.W)
+            case _: SInt => k -> 0.S(v.getWidth.W)
+            case _: EnumType => k -> v
+            case _: Bundle => k -> v.asInstanceOf[Bundle].elements
+            case _ => k -> "Not matched"
+          }
       }
       println(expectedDefaultValue)
-      println(el)
+//      println(el)
 //      print(Map("wfi" -> el("wfi").asInstanceOf[ControlEnum].default))
 //      print(Map("wfi" -> el("wfi").asInstanceOf[ChiselEnum]))
-      println(IllegalInstIE.default)
+//      println(IllegalInstIE.default)
 
       // Example test case for an ADD instruction (R-type)
       val addInst = "b0000000_00001_00010_000_00011_0110011".U // ADD x3, x1, x2
