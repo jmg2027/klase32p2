@@ -10,7 +10,7 @@ import freechips.rocketchip.util._
 
 object Acc {
  class Request(implicit p: Parameters) extends Bundle {
-  val k = p(KlasE32ParamKey)
+  val k = p(KLASE32ParamKey)
 
   val addr = UInt(k.addrWidth.W)
   val id = UInt(k.accidWidth.W)
@@ -21,7 +21,7 @@ object Acc {
  }
 
  class Response(implicit p: Parameters) extends Bundle {
-  val k = p(KlasE32ParamKey)
+  val k = p(KLASE32ParamKey)
 
   val id = UInt(k.accidWidth.W)
   val data = UInt(k.accdataWidth.W)
@@ -63,12 +63,16 @@ object Interrupt {
  }
 }
 
-class Stall extends Bundle {
- val ie = new Bundle {
+class StallBundle extends Bundle {
+ def orR = this.asUInt.orR
+}
+
+class Stall extends StallBundle {
+ val ie = new StallBundle {
   val store = Bool()
   val csr = Bool()
  }
- val me = new Bundle{
+ val me = new StallBundle {
   val load = Bool()
   val hzd = Bool()
   val fence = Bool()
@@ -77,21 +81,15 @@ class Stall extends Bundle {
 }
 
 class ExternalMemoryInterfaceReq(implicit p: Parameters) extends Bundle {
- val k = p(KlasE32ParamKey)
+ val k = p(KLASE32ParamKey)
 
  val addr = UInt(k.dataWidth.W)
  val numByte = UInt(2.W)
 }
 
 class ExternalMemoryInterfaceResp(implicit p: Parameters) extends Bundle {
- val k = p(KlasE32ParamKey)
+ val k = p(KLASE32ParamKey)
  val rdata = UInt(k.dataWidth.W)
-}
-
-class ValidAckBundle extends Bundle {
- // Decoupled: Chisel IO
- val valid = Input(Bool())
- val ack = Output(Bool())
 }
 
 class HeartXcpt extends Bundle {
@@ -103,7 +101,7 @@ class HeartXcpt extends Bundle {
 }
 
 class EpmIntf(implicit p: Parameters) extends CoreBundle {
- val k = p(KlasE32ParamKey)
+ val k = p(KLASE32ParamKey)
 
  val cmd = Output(UInt(5.W))
  val req = Output(Bool())
@@ -121,14 +119,23 @@ class EpmIntf(implicit p: Parameters) extends CoreBundle {
 }
 
 class FetchQueueEntry(implicit p: Parameters) extends CoreBundle {
- val k = p(KlasE32ParamKey)
+ val k = p(KLASE32ParamKey)
 
  val data = UInt(k.fetchWidth.W)
  val xcpt = new HeartXcpt
 }
 
+
+class StoreBufferEntry(implicit p: Parameters) extends CoreBundle {
+ val k = p(KLASE32ParamKey)
+
+ val addr = UInt(k.addrWidth.W)
+ val data = UInt(xLen.W)
+ val mask = UInt((wordsize/8).W)
+}
+
 class EdmIntf(implicit p: Parameters) extends CoreBundle {
- val k = p(KlasE32ParamKey)
+ val k = p(KLASE32ParamKey)
  val maskBits = k.dataWidth / 8
 
  val cmd = Output(UInt(5.W)) // with dm_st_req or dm_ld_req
