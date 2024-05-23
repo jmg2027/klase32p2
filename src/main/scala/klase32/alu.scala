@@ -2,11 +2,13 @@ package klase32
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.BundleLiterals._
 import klase32.config._
+import klase32.param.KLASE32ParamKey
 
 
 class ALU(implicit p: Parameters) extends CoreModule()(p) with HasCoreParameters {
+  val k = p(KLASE32ParamKey)
+
   val io = IO(new Bundle{
     val ctrl = Input(ALUControlIE())
     val A = Input(UInt(mxLen.W))
@@ -50,8 +52,7 @@ class ALU(implicit p: Parameters) extends CoreModule()(p) with HasCoreParameters
               Mux(io.ctrl === OR || io.ctrl === AND, io.A & io.B, 0.U)
 
   // SLT, SLTU
-  // val slt = Mux(io.ctrl === SLT || io.ctrl === SLTU, Cat(Fill(31, 0.U), lt), 0.U)
-  val slt = Mux(io.ctrl === SLT || io.ctrl === SLTU, lt, 0.U) // maybe this can be right?
+  val slt = Mux(io.ctrl === SLT || io.ctrl === SLTU, lt, 0.U)
 
   io.R := Mux(io.ctrl === ADD || io.ctrl === SUB, adder_result, shout | logic | slt)
 }
