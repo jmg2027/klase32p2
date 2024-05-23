@@ -3,7 +3,6 @@ package klase32
 import chisel3._
 import chiseltest._
 import klas.KlasTest
-import klase32.config._
 import klase32.param.DefaultConfig
 
 class FrontendTest extends KlasTest {
@@ -11,9 +10,9 @@ class FrontendTest extends KlasTest {
   behavior of "Frontend"
 
   it should "correctly handle control flows and fetch operations" in {
-    test(new Frontend) { c =>
-            // Initialize all input signals to 0
-      dut.io.ctrl.poke(0.U)
+    test(new Frontend) { dut =>
+      // Initialize all input signals to 0
+      dut.io.ctrl.poke(FrontendControlIE.default)
       dut.io.if_pc.poke(0.U)
       dut.io.evec.poke(0.U)
       dut.io.cnd.poke(false.B)
@@ -22,7 +21,7 @@ class FrontendTest extends KlasTest {
       dut.io.divBusy.poke(false.B)
       dut.io.stall.poke(false.B)
       dut.io.aluR.poke(0.U)
-      dut.io.flushEn.poke(0.U.asTypeOf(new IcacheFlushIE))
+      dut.io.flushEn.poke(IcacheFlushIE(false.B))
       dut.io.epm.bootAddr.poke(0.U)
       dut.io.epm.data.poke(0.U)
       dut.io.epm.xcpt.poke(0.U.asTypeOf(new HeartXcpt))
@@ -65,7 +64,6 @@ class FrontendTest extends KlasTest {
       dut.io.pcRegWrite.bits.expect(0x3000.U)
       dut.io.epm.req.expect(true.B) // EPM request should be true after jump
       dut.io.epm.addr.expect(0x3000.U)
-      dut.io.ctrl.poke(0.U)
 
       // Cycle 5: Branch handling (BR)
       dut.io.ctrl.poke(FrontendControlIE.BR)
@@ -76,7 +74,6 @@ class FrontendTest extends KlasTest {
       dut.io.pcRegWrite.bits.expect(0x4000.U)
       dut.io.epm.req.expect(true.B) // EPM request should be true after branch
       dut.io.epm.addr.expect(0x4000.U)
-      dut.io.ctrl.poke(0.U)
 
       // Cycle 6: JALR handling
       dut.io.ctrl.poke(FrontendControlIE.JALR)
@@ -86,7 +83,6 @@ class FrontendTest extends KlasTest {
       dut.io.pcRegWrite.bits.expect(0x5000.U)
       dut.io.epm.req.expect(true.B) // EPM request should be true after JALR
       dut.io.epm.addr.expect(0x5000.U)
-      dut.io.ctrl.poke(0.U)
 
       // Cycle 7: Normal fetch with stall
       dut.io.stall.poke(true.B)
