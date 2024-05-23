@@ -105,9 +105,9 @@ class CSRModuleTest extends KlasTest {
           case "external" => 11
         }
         testCSRRW(CSR.CSRAddr.mie.U, (1 << causeInt).asUInt)
-        if (causeInt == 3) {dut.io.interrupt.e.poke(true.B)}
+        if (causeInt == 3) {dut.io.interrupt.s.poke(true.B)}
         else if (causeInt == 7) {dut.io.interrupt.t.poke(true.B)}
-        else if (causeInt == 11) {dut.io.interrupt.s.poke(true.B)}
+        else if (causeInt == 11) {dut.io.interrupt.e.poke(true.B)}
         else {assert(throw new Exception(s"Not allowed interrupt cause! {$cause}"))}
         dut.clock.step(1)
         dut.io.interruptPending.expect(true.B)
