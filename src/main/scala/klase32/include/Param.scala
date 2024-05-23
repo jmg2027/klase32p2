@@ -3,10 +3,9 @@ package klase32
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.BundleLiterals._
 import klase32.config._
 import chisel3.util.log2Ceil
-import klase32.param.KlasE32ParamKey
+import klase32.param.KLASE32ParamKey
 
 
 object param {
@@ -36,9 +35,13 @@ object param {
 
                                outstandingLoad: Int = 2,
                                fetchqueueEntries: Int = 4,
+                               loadstorequeueEntries: Int = 4,
+                               storeBufferEntries: Int = 2,
 
                                causeWidth: Int = 4,
                                hartIDWidth: Int = 4,
+
+                               addressAlignByte: Int = 4,
 
                              )
   case class KlasE32Param(
@@ -53,16 +56,16 @@ object param {
     def dataAlign = log2Ceil(dataWidth/8)
   }
 
-  case object KlasE32ParamKey extends Field[KlasE32Param](KlasE32Param())
+  case object KLASE32ParamKey extends Field[KlasE32Param](KlasE32Param())
 
   class DefaultConfig extends Config((site, here, up) => {
-    case KlasE32ParamKey => KlasE32Param()
+    case KLASE32ParamKey => KlasE32Param()
   })
 }
 
 trait HasCoreParameters {
   implicit val p: Parameters
-  def coreParams = p(KlasE32ParamKey).core
+  def coreParams = p(KLASE32ParamKey).core
 
   val wordsize: Int = 32
 
@@ -84,14 +87,21 @@ trait HasCoreParameters {
   def readportNum = coreParams.readportNum
   def writeportNum = coreParams.writeportNum
   def fetchqueueEntries = coreParams.fetchqueueEntries
+  def loadstorequeueEntries = coreParams.loadstorequeueEntries
+  def storeBufferEntries = coreParams.storeBufferEntries
 
   def mxLen = coreParams.mxLen
+  def sxLen = coreParams.sxLen
+  def uxLen = coreParams.uxLen
   def csrWidthM = coreParams.mxLen
   def csrWidthS = coreParams.sxLen
   def csrWidthU = coreParams.uxLen
+  def xLen = Seq(mxLen, sxLen, uxLen).max
 
   def causeWidth = coreParams.causeWidth
   def hartIDWidth = coreParams.hartIDWidth
+
+  def addressAlignByte = coreParams.addressAlignByte
 }
 
 abstract class CoreModule(implicit val p: Parameters) extends Module with HasCoreParameters
