@@ -3,8 +3,8 @@ package klase32
 import chisel3._
 import chiseltest._
 import klas.KlasTest
-import klase32.config._
 import klase32.param.DefaultConfig
+import scala.util.Random
 
 class ALUTest extends KlasTest {
   implicit val p = new DefaultConfig
