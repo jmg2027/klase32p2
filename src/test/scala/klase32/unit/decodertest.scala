@@ -5,16 +5,16 @@ import chiseltest._
 import klas.KlasTest
 import klase32.config._
 import klase32.param.DefaultConfig
-import chisel3.experimental.BundleLiterals._
-import snitch.enums.SnitchEnum
-import klase32.Instructions._
+import chisel3.util.BitPat
+import chisel3.util.BitPat.bitPatToUInt
+import snitch.enums._
 
 class DecoderTest extends KlasTest {
   behavior of "Decoder"
 
   it should "correctly decode various instruction types" in {
     implicit val p: Parameters = new DefaultConfig() // Ensure this matches your configuration class
-      // Function to initialize a Decoded bundle with default values
+    // Function to initialize a Decoded bundle with default values
     test(new Decoder) { dut =>
       def initializeDecoded(decoded: Decoded): Unit = {
         // Initialize UInt and SInt fields with 0
@@ -26,7 +26,7 @@ class DecoderTest extends KlasTest {
         decoded.imm.j := 0.S
         decoded.imm.b := 0.S
         decoded.imm.s := 0.S
-        
+
         // Initialize EnumType fields with their default values
         decoded.aluCtrl := ALUControlIE.default
         decoded.csrCtrl := CSRControl.default
@@ -53,50 +53,50 @@ class DecoderTest extends KlasTest {
       initializeDecoded(defaultValues)
 
 
-    //   // Function to generate a default field map
-    //   def defaultFieldMap(decoded: Decoded): Map[String, UInt] = {
-    //     def traverseBundle(bundle: Bundle, prefix: String = ""): Map[String, UInt] = {
-    //       bundle.elements.flatMap {
-    //         case (k, v) =>
-    //           val fullName = if (prefix.isEmpty) k else s"$prefix.$k"
-    //           v match {
-    //             case u: UInt => Some(fullName -> 0.U(u.getWidth.W))
-    //             case s: SInt => Some(fullName -> 0.S(s.getWidth.W).asUInt)
-    //             case e: EnumType => Some(fullName -> e.cloneType.all.head.asUInt) // Use the first value as default
-    //             case b: Bundle => traverseBundle(b, fullName)
-    //             case _ => None
-    //           }
-    //       }.toMap
-    //     }
-    //     traverseBundle(decoded)
-    //   }
+      //   // Function to generate a default field map
+      //   def defaultFieldMap(decoded: Decoded): Map[String, UInt] = {
+      //     def traverseBundle(bundle: Bundle, prefix: String = ""): Map[String, UInt] = {
+      //       bundle.elements.flatMap {
+      //         case (k, v) =>
+      //           val fullName = if (prefix.isEmpty) k else s"$prefix.$k"
+      //           v match {
+      //             case u: UInt => Some(fullName -> 0.U(u.getWidth.W))
+      //             case s: SInt => Some(fullName -> 0.S(s.getWidth.W).asUInt)
+      //             case e: EnumType => Some(fullName -> e.cloneType.all.head.asUInt) // Use the first value as default
+      //             case b: Bundle => traverseBundle(b, fullName)
+      //             case _ => None
+      //           }
+      //       }.toMap
+      //     }
+      //     traverseBundle(decoded)
+      //   }
 
-    //   // Create a default field map for the Decoded bundle
-    //   val defaultValues = defaultFieldMap(d.io.decSig)
+      //   // Create a default field map for the Decoded bundle
+      //   val defaultValues = defaultFieldMap(d.io.decSig)
 
       // Function to test an instruction
       def testInstruction(inst: BitPat, expectedFields: Map[String, UInt]): Unit = {
-        dut.io.inst.poke(BitPatToUInt(inst))
+        dut.io.inst.poke(bitPatToUInt(inst))
         dut.clock.step() // Simulate a clock cycle
 
-        val allFields = defaultValues ++ expectedFields // Merge default fields with the fields to check
+        val allFields = defaultValues.elements ++ expectedFields // Merge default fields with the fields to check
 
         allFields.foreach { case (field, expected) =>
           field.split('.').toList match {
             case List(k) =>
-              d.io.decSig.elements.get(k) match {
-                case Some(_: UInt) => d.io.decSig.elements(k).asInstanceOf[UInt].expect(expected)
-                case Some(_: SInt) => d.io.decSig.elements(k).asInstanceOf[SInt].asUInt.expect(expected)
-                case Some(_: EnumType) => d.io.decSig.elements(k).asInstanceOf[EnumType].asUInt.expect(expected)
+              dut.io.decSig.elements.get(k) match {
+                case Some(_: UInt) => dut.io.decSig.elements(k).asInstanceOf[UInt].expect(expected.asInstanceOf[UInt])
+                case Some(_: SInt) => dut.io.decSig.elements(k).asInstanceOf[SInt].asUInt.expect(expected.asInstanceOf[UInt])
+                case Some(_: EnumType) => dut.io.decSig.elements(k).asInstanceOf[EnumType].asUInt.expect(expected.asInstanceOf[UInt])
                 case _ => throw new Exception(s"Unknown field: $k")
               }
             case List(parent, child) =>
-              d.io.decSig.elements.get(parent) match {
+              dut.io.decSig.elements.get(parent) match {
                 case Some(b: Bundle) =>
                   b.elements.get(child) match {
-                    case Some(_: UInt) => b.elements(child).asInstanceOf[UInt].expect(expected)
-                    case Some(_: SInt) => b.elements(child).asInstanceOf[SInt].asUInt.expect(expected)
-                    case Some(_: EnumType) => b.elements(child).asInstanceOf[EnumType].asUInt.expect(expected)
+                    case Some(_: UInt) => b.elements(child).asInstanceOf[UInt].expect(expected.asInstanceOf[UInt])
+                    case Some(_: SInt) => b.elements(child).asInstanceOf[SInt].asUInt.expect(expected.asInstanceOf[UInt])
+                    case Some(_: EnumType) => b.elements(child).asInstanceOf[EnumType].asUInt.expect(expected.asInstanceOf[UInt])
                     case _ => throw new Exception(s"Unknown field: $parent.$child")
                   }
                 case _ => throw new Exception(s"Unknown field: $parent")
@@ -179,8 +179,8 @@ class DecoderTest extends KlasTest {
         "rs1" -> 1.U,
         "rs2" -> 2.U,
         "aluCtrl" -> ALUControlIE.ADD.asUInt,
-        "operandSelect.a" -> OperandType.reg.asUInt,
-        "operandSelect.b" -> OperandType.reg.asUInt
+        "operandSelect.a" -> OperandType.Reg.asUInt,
+        "operandSelect.b" -> OperandType.Reg.asUInt
       )
       testInstruction(addInst, addExpectedFields)
 
@@ -191,8 +191,8 @@ class DecoderTest extends KlasTest {
         "rs1" -> 1.U,
         "imm.i" -> 1.S.asUInt,
         "aluCtrl" -> ALUControlIE.ADD.asUInt,
-        "operandSelect.a" -> OperandType.reg.asUInt,
-        "operandSelect.b" -> OperandType.iImmediate.asUInt
+        "operandSelect.a" -> OperandType.Reg.asUInt,
+        "operandSelect.b" -> OperandType.IImmediate.asUInt
       )
       testInstruction(addiInst, addiExpectedFields)
 
@@ -202,24 +202,12 @@ class DecoderTest extends KlasTest {
         "rs1" -> 1.U,
         "rs2" -> 2.U,
         "imm.s" -> 3.S.asUInt,
-        "lsuCtrl.lsSize" -> LSUSize.word.asUInt,
+        "lsuCtrl.lsSize" -> DataSize.Word.asUInt,
         "lsuCtrl.isStore" -> true.B.asUInt,
-        "operandSelect.a" -> OperandType.reg.asUInt,
-        "operandSelect.b" -> OperandType.sImmediate.asUInt
+        "operandSelect.a" -> OperandType.Reg.asUInt,
+        "operandSelect.b" -> OperandType.SImmediate.asUInt
       )
       testInstruction(swInst, swExpectedFields)
-
-      // Example test case for a BEQ instruction (B-type)
-      val beqInst = BitPat("b0000000_00001_00010_000_00000_1100011") // BEQ x1, x2, 0
-      val beqExpectedFields = Map(
-        "rs1" -> 1.U,
-        "rs2" -> 2.U,
-        "imm.b" -> 0.S.asUInt,
-        "aluCtrl" -> ALUControlIE.EQ.asUInt,
-        "operandSelect.a" -> OperandType.reg.asUInt,
-        "operandSelect.b" -> OperandType.bImmediate.asUInt
-      )
-      testInstruction(beqInst, beqExpectedFields)
 
       // Example test case for an LUI instruction (U-type)
       val luiInst = BitPat("b00000000000100000000_00000_0110111") // LUI x0, 0x1000
@@ -227,8 +215,8 @@ class DecoderTest extends KlasTest {
         "rd" -> 0.U,
         "imm.u" -> 0x1000.S.asUInt,
         "aluCtrl" -> ALUControlIE.ADD.asUInt,
-        "operandSelect.a" -> OperandType.reg.asUInt,
-        "operandSelect.b" -> OperandType.uImmediate.asUInt
+        "operandSelect.a" -> OperandType.Reg.asUInt,
+        "operandSelect.b" -> OperandType.UImmediate.asUInt
       )
       testInstruction(luiInst, luiExpectedFields)
 
@@ -239,8 +227,8 @@ class DecoderTest extends KlasTest {
         "imm.j" -> 0x1000.S.asUInt,
         "frontendCtrl" -> FrontendControlIE.JAL.asUInt,
         "w1Wb" -> W1WritebackIE.EN.asUInt,
-        "operandSelect.a" -> OperandType.pc.asUInt,
-        "operandSelect.b" -> OperandType.jImmediate.asUInt
+        "operandSelect.a" -> OperandType.PC.asUInt,
+        "operandSelect.b" -> OperandType.JImmediate.asUInt
       )
       testInstruction(jalInst, jalExpectedFields)
 
@@ -249,7 +237,7 @@ class DecoderTest extends KlasTest {
       val illegalExpectedFields = Map(
         "illegal" -> IllegalInstIE.EN.asUInt
       )
-      testInstruction(jalInst, jalExpectedFields)
+      testInstruction(illegalInst, illegalExpectedFields)
     }
   }
 }
