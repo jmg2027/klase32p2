@@ -16,70 +16,70 @@ class DecoderTest extends KlasTest {
     implicit val p: Parameters = new DefaultConfig() // Ensure this matches your configuration class
     // Function to initialize a Decoded bundle with default values
     test(new Decoder) { dut =>
-      def initializeDecoded(decoded: Decoded): Unit = {
-        // Initialize UInt and SInt fields with 0
-        decoded.rd := 0.U
-        decoded.rs1 := 0.U
-        decoded.rs2 := 0.U
-        decoded.imm.i := 0.S
-        decoded.imm.u := 0.S
-        decoded.imm.j := 0.S
-        decoded.imm.b := 0.S
-        decoded.imm.s := 0.S
+//      def initializeDecoded(decoded: Decoded): Unit = {
+//        // Initialize UInt and SInt fields with 0
+//        decoded.rd := 0.U
+//        decoded.rs1 := 0.U
+//        decoded.rs2 := 0.U
+//        decoded.imm.i := 0.S
+//        decoded.imm.u := 0.S
+//        decoded.imm.j := 0.S
+//        decoded.imm.b := 0.S
+//        decoded.imm.s := 0.S
+//
+//        // Initialize EnumType fields with their default values
+//        decoded.aluCtrl := ALUControlIE.default
+//        decoded.csrCtrl := CSRControl.default
+//        decoded.operandSelect.a := OperandType.default
+//        decoded.operandSelect.b := OperandType.default
+//        decoded.rdType := RdType.default
+//        decoded.w1Wb := W1WritebackIE.default
+//        decoded.frontendCtrl := FrontendControlIE.default
+//        decoded.lsuCtrl.lsSize := DataSize.default
+//        decoded.lsuCtrl.isStore := false.B
+//        decoded.lsuCtrl.isLoad := false.B
+//        decoded.lsuCtrl.isSigned := SignedControl.default
+//        decoded.ecall := EcallIE.default
+//        decoded.ebreak := EbreakIE.default
+//        decoded.mret := MRetIE.default
+//        decoded.fence := FenceEnableIE.default
+//        decoded.flushICache := IcacheFlushIE.default
+//        decoded.wfi := WFIIE.default
+//        decoded.illegal := IllegalInstIE.default
+//      }
+//
+//      // Initialize the Decoded bundle
+//      val defaultValues = Wire(new Decoded)
+//      initializeDecoded(defaultValues)
 
-        // Initialize EnumType fields with their default values
-        decoded.aluCtrl := ALUControlIE.default
-        decoded.csrCtrl := CSRControl.default
-        decoded.operandSelect.a := OperandType.default
-        decoded.operandSelect.b := OperandType.default
-        decoded.rdType := RdType.default
-        decoded.w1Wb := W1WritebackIE.default
-        decoded.frontendCtrl := FrontendControlIE.default
-        decoded.lsuCtrl.lsSize := DataSize.default
-        decoded.lsuCtrl.isStore := false.B
-        decoded.lsuCtrl.isLoad := false.B
-        decoded.lsuCtrl.isSigned := SignedControl.default
-        decoded.ecall := EcallIE.default
-        decoded.ebreak := EbreakIE.default
-        decoded.mret := MRetIE.default
-        decoded.fence := FenceEnableIE.default
-        decoded.flushICache := IcacheFlushIE.default
-        decoded.wfi := WFIIE.default
-        decoded.illegal := IllegalInstIE.default
-      }
 
-      // Initialize the Decoded bundle
-      val defaultValues = Wire(new Decoded)
-      initializeDecoded(defaultValues)
+         // Function to generate a default field map
+         def defaultFieldMap(decoded: Decoded): Map[String, UInt] = {
+           def traverseBundle(bundle: Bundle, prefix: String = ""): Map[String, UInt] = {
+             bundle.elements.flatMap {
+               case (k, v) =>
+                 val fullName = if (prefix.isEmpty) k else s"$prefix.$k"
+                 v match {
+                   case u: UInt => Some(fullName -> 0.U(u.getWidth.W))
+                   case s: SInt => Some(fullName -> 0.S(s.getWidth.W).asUInt)
+                   case e: EnumType => Some(fullName -> 0.U(e.getWidth.W).asUInt)
+                   case b: Bundle => traverseBundle(b, fullName)
+                   case _ => None
+                 }
+             }.toMap
+           }
+           traverseBundle(decoded)
+         }
 
-
-      //   // Function to generate a default field map
-      //   def defaultFieldMap(decoded: Decoded): Map[String, UInt] = {
-      //     def traverseBundle(bundle: Bundle, prefix: String = ""): Map[String, UInt] = {
-      //       bundle.elements.flatMap {
-      //         case (k, v) =>
-      //           val fullName = if (prefix.isEmpty) k else s"$prefix.$k"
-      //           v match {
-      //             case u: UInt => Some(fullName -> 0.U(u.getWidth.W))
-      //             case s: SInt => Some(fullName -> 0.S(s.getWidth.W).asUInt)
-      //             case e: EnumType => Some(fullName -> e.cloneType.all.head.asUInt) // Use the first value as default
-      //             case b: Bundle => traverseBundle(b, fullName)
-      //             case _ => None
-      //           }
-      //       }.toMap
-      //     }
-      //     traverseBundle(decoded)
-      //   }
-
-      //   // Create a default field map for the Decoded bundle
-      //   val defaultValues = defaultFieldMap(d.io.decSig)
+         // Create a default field map for the Decoded bundle
+         val defaultValues = defaultFieldMap(dut.io.decSig)
 
       // Function to test an instruction
       def testInstruction(inst: BitPat, expectedFields: Map[String, UInt]): Unit = {
         dut.io.inst.poke(bitPatToUInt(inst))
         dut.clock.step() // Simulate a clock cycle
 
-        val allFields = defaultValues.elements ++ expectedFields // Merge default fields with the fields to check
+        val allFields = defaultValues ++ expectedFields // Merge default fields with the fields to check
 
         allFields.foreach { case (field, expected) =>
           field.split('.').toList match {
