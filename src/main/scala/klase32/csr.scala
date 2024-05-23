@@ -3,7 +3,6 @@ package klase32
 import chisel3._
 import chisel3.util._
 import klase32.config._
-import chisel3.experimental.BundleLiterals._
 
 
 object CSR {
@@ -337,17 +336,8 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
 
   val csrAddr = csrMap map {case (k, v) => k -> (io.ctrl.addr === k.U)}
 
-  //  printf("csrAddr = %c", csrAddr.mkString)
-  //  printf(cf"${csrAddr.getOrElse(768)}\n")
   val a = for ((k, v) <- csrMap) yield (k)
   val b = for ((k, v) <- csrMap) yield (csrAddr(k) -> v)
-  //  val c = csrAddr.getOrElse(k)
-  for ((k, v) <- csrMap) {
-    val c = csrAddr.getOrElse(k, false)
-    //    printf(cf"$csrAddr\n")
-    //    printf(cf"key: $c\n")
-    //    printf(cf"value: $v\n")
-  }
   io.rd := Mux1H(for ((k, v) <- csrMap) yield (csrAddr(k) -> v.asUInt))
 
   val wen = (io.ctrl.inst === RW) || (io.ctrl.inst === RS) || (io.ctrl.inst === RC)
@@ -424,7 +414,7 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     csr.mtval.write(tval)
   }
 
-  when (io.mret.asUInt.orR) {
+  when (io.mret.asUInt.orR || exception) {
     csr.mepc.read(io.evec)
   }
 
@@ -441,6 +431,8 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     (csr.mip.reg.mtip && csr.mie.reg.mtip) -> 7.U,
     (csr.mip.reg.msip && csr.mie.reg.msip) -> 3.U,
   ))
+
+  printf(cf"MIE: ${csr.mie.reg}\n")
 
   // WFI
   // FIXME: CLK Gating
