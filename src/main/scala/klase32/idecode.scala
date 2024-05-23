@@ -336,7 +336,7 @@ object RV32IDecode extends InstDecode {
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRWI,
-      OpCompProperty(OperandType.CSRImmmediate, OperandType.None) ++
+      OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
         CSRControlProperty(CSRControl.RW) ++
         RdProperty(RdType.BypassCSR)
     ),
@@ -346,7 +346,7 @@ object RV32IDecode extends InstDecode {
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRSI,
-      OpCompProperty(OperandType.CSRImmmediate, OperandType.None) ++
+      OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
         CSRControlProperty(CSRControl.RS) ++
         RdProperty(RdType.BypassCSR)
     ),
@@ -356,7 +356,7 @@ object RV32IDecode extends InstDecode {
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRCI,
-      OpCompProperty(OperandType.CSRImmmediate, OperandType.None) ++
+      OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
         CSRControlProperty(CSRControl.RC) ++
         RdProperty(RdType.BypassCSR)
     ),
