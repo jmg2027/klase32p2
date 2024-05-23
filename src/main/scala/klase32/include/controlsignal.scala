@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
+import klase32.param.KLASE32ParamKey
 import snitch.enums.SnitchEnum
 
 trait ControlEnum extends SnitchEnum
@@ -49,7 +50,6 @@ object FrontendControlIE extends ControlDefaultEnum {
   val MRET = Value
   val JALR = Value
 }
-
 
 object W1WritebackIE extends ControlDefaultEnableEnum
   // Write to GPR with no TCM latency, not from lsu
