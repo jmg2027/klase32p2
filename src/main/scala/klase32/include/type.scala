@@ -12,6 +12,15 @@ import klase32.param.KlasE32ParamKey
 object enums {
   trait SnitchEnum extends ChiselEnum {
     val default: this.Type
+
+    def getValue(field: String): this.Type = {
+      this.all.find(_.name == field).getOrElse(this.all.head)
+    }
+
+    def getDefaultValue: this.Type = {
+      getValue("default")
+    }
+
   }
   object DataSize extends SnitchEnum {
     val Byte      = Value
@@ -85,7 +94,7 @@ object enums {
     val SImmediate      = Value
     // val SFImmediate     = Value
     val PC              = Value
-    val CSRImmmediate   = Value
+    val CSRImmediate   = Value
 
     override val default = this.None
   }

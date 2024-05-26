@@ -5,7 +5,7 @@ import chisel3._
 import chisel3.util._
 import klase32.config._
 import chisel3.util.log2Ceil
-import klase32.param.KLASE32ParamKey
+import klase32.param.KlasE32ParamKey
 
 
 object param {
@@ -56,16 +56,16 @@ object param {
     def dataAlign = log2Ceil(dataWidth/8)
   }
 
-  case object KLASE32ParamKey extends Field[KlasE32Param](KlasE32Param())
+  case object KlasE32ParamKey extends Field[KlasE32Param](KlasE32Param())
 
   class DefaultConfig extends Config((site, here, up) => {
-    case KLASE32ParamKey => KlasE32Param()
+    case KlasE32ParamKey => KlasE32Param()
   })
 }
 
 trait HasCoreParameters {
   implicit val p: Parameters
-  def coreParams = p(KLASE32ParamKey).core
+  def coreParams = p(KlasE32ParamKey).core
 
   val wordsize: Int = 32
 

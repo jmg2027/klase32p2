@@ -3,11 +3,11 @@ package klase32
 import chisel3._
 import chisel3.util._
 import klase32.config._
-import klase32.param.KLASE32ParamKey
+import klase32.param.KlasE32ParamKey
 
 
 class ALU(implicit p: Parameters) extends CoreModule()(p) with HasCoreParameters {
-  val k = p(KLASE32ParamKey)
+  val k = p(KlasE32ParamKey)
 
   val io = IO(new Bundle{
     val ctrl = Input(ALUControlIE())

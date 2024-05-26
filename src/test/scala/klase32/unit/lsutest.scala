@@ -17,7 +17,7 @@ class LSUTest extends KlasTest {
     test(new LSU) { dut =>
       // Function to perform store operation
       def performStore(addr: UInt, data: UInt, size: DataSize.Type): Unit = {
-        val alignedAddr = (addr >> 2) << 2 // Align address to 4 bytes
+        val alignedAddr = ((addr >> 2.U).asUInt << 2.U).asUInt // Align address to 4 bytes
         val offset = addr(1, 0)
         val expectedMask = size match {
           case DataSize.Byte => ("b0001".U << offset)

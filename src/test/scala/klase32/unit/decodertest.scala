@@ -8,6 +8,7 @@ import klase32.param.DefaultConfig
 import chisel3.util.BitPat
 import chisel3.util.BitPat.bitPatToUInt
 import snitch.enums._
+import freechips.rocketchip.diplomacy.BufferParams.default
 
 class DecoderTest extends KlasTest {
   behavior of "Decoder"
@@ -54,15 +55,15 @@ class DecoderTest extends KlasTest {
 
 
          // Function to generate a default field map
-         def defaultFieldMap(decoded: Decoded): Map[String, UInt] = {
-           def traverseBundle(bundle: Bundle, prefix: String = ""): Map[String, UInt] = {
+         def defaultFieldMap(decoded: Decoded): Map[String, Data] = {
+           def traverseBundle(bundle: Bundle, prefix: String = ""): Map[String, Data] = {
              bundle.elements.flatMap {
                case (k, v) =>
                  val fullName = if (prefix.isEmpty) k else s"$prefix.$k"
                  v match {
                    case u: UInt => Some(fullName -> 0.U(u.getWidth.W))
-                   case s: SInt => Some(fullName -> 0.S(s.getWidth.W).asUInt)
-                   case e: EnumType => Some(fullName -> 0.U(e.getWidth.W).asUInt)
+                   case s: SInt => Some(fullName -> 0.S(s.getWidth.W))
+                   case e: ControlDefaultEnum#Type => Some(fullName -> e.asInstanceOf[ControlDefaultEnum].getDefaultValue)
                    case b: Bundle => traverseBundle(b, fullName)
                    case _ => None
                  }
@@ -73,9 +74,10 @@ class DecoderTest extends KlasTest {
 
          // Create a default field map for the Decoded bundle
          val defaultValues = defaultFieldMap(dut.io.decSig)
+         println(defaultValues)
 
       // Function to test an instruction
-      def testInstruction(inst: BitPat, expectedFields: Map[String, UInt]): Unit = {
+      def testInstruction(inst: BitPat, expectedFields: Map[String, Data]): Unit = {
         dut.io.inst.poke(bitPatToUInt(inst))
         dut.clock.step() // Simulate a clock cycle
 
@@ -107,64 +109,64 @@ class DecoderTest extends KlasTest {
       }
 
       val instructionTests = Seq(
-        (Instructions.ADD, Map("aluCtrl" -> ALUControlIE.ADD.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt)),
-        (Instructions.ADDI, Map("aluCtrl" -> ALUControlIE.ADD.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt)),
-        (Instructions.SUB, Map("aluCtrl" -> ALUControlIE.SUB.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt)),
-        (Instructions.XOR, Map("aluCtrl" -> ALUControlIE.XOR.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt)),
-        (Instructions.XORI, Map("aluCtrl" -> ALUControlIE.XOR.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt)),
-        (Instructions.OR, Map("aluCtrl" -> ALUControlIE.OR.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt)),
-        (Instructions.ORI, Map("aluCtrl" -> ALUControlIE.OR.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt)),
-        (Instructions.AND, Map("aluCtrl" -> ALUControlIE.AND.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt)),
-        (Instructions.ANDI, Map("aluCtrl" -> ALUControlIE.AND.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt)),
-        (Instructions.SLT, Map("aluCtrl" -> ALUControlIE.SLT.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt)),
-        (Instructions.SLTI, Map("aluCtrl" -> ALUControlIE.SLT.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt)),
-        (Instructions.SLTU, Map("aluCtrl" -> ALUControlIE.SLTU.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt)),
-        (Instructions.SLTIU, Map("aluCtrl" -> ALUControlIE.SLTU.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt)),
-        (Instructions.SLL, Map("aluCtrl" -> ALUControlIE.SLL.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt)),
-        (Instructions.SLLI, Map("aluCtrl" -> ALUControlIE.SLL.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt)),
-        (Instructions.SRL, Map("aluCtrl" -> ALUControlIE.SRL.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt)),
-        (Instructions.SRLI, Map("aluCtrl" -> ALUControlIE.SRL.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt)),
-        (Instructions.SRA, Map("aluCtrl" -> ALUControlIE.SRA.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt)),
-        (Instructions.SRAI, Map("aluCtrl" -> ALUControlIE.SRA.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt)),
+        (Instructions.ADD, Map("aluCtrl" -> ALUControlIE.ADD, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg)),
+        (Instructions.ADDI, Map("aluCtrl" -> ALUControlIE.ADD, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate)),
+        (Instructions.SUB, Map("aluCtrl" -> ALUControlIE.SUB, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg)),
+        (Instructions.XOR, Map("aluCtrl" -> ALUControlIE.XOR, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg)),
+        (Instructions.XORI, Map("aluCtrl" -> ALUControlIE.XOR, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate)),
+        (Instructions.OR, Map("aluCtrl" -> ALUControlIE.OR, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg)),
+        (Instructions.ORI, Map("aluCtrl" -> ALUControlIE.OR, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate)),
+        (Instructions.AND, Map("aluCtrl" -> ALUControlIE.AND, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg)),
+        (Instructions.ANDI, Map("aluCtrl" -> ALUControlIE.AND, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate)),
+        (Instructions.SLT, Map("aluCtrl" -> ALUControlIE.SLT, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg)),
+        (Instructions.SLTI, Map("aluCtrl" -> ALUControlIE.SLT, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate)),
+        (Instructions.SLTU, Map("aluCtrl" -> ALUControlIE.SLTU, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg)),
+        (Instructions.SLTIU, Map("aluCtrl" -> ALUControlIE.SLTU, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate)),
+        (Instructions.SLL, Map("aluCtrl" -> ALUControlIE.SLL, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg)),
+        (Instructions.SLLI, Map("aluCtrl" -> ALUControlIE.SLL, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate)),
+        (Instructions.SRL, Map("aluCtrl" -> ALUControlIE.SRL, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg)),
+        (Instructions.SRLI, Map("aluCtrl" -> ALUControlIE.SRL, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate)),
+        (Instructions.SRA, Map("aluCtrl" -> ALUControlIE.SRA, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg)),
+        (Instructions.SRAI, Map("aluCtrl" -> ALUControlIE.SRA, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate)),
 
-        (Instructions.LUI, Map("aluCtrl" -> ALUControlIE.ADD.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.UImmediate.asUInt)),
-        (Instructions.AUIPC, Map("aluCtrl" -> ALUControlIE.ADD.asUInt, "operandSelect.a" -> OperandType.PC.asUInt, "operandSelect.b" -> OperandType.UImmediate.asUInt)),
+        (Instructions.LUI, Map("aluCtrl" -> ALUControlIE.ADD, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.UImmediate)),
+        (Instructions.AUIPC, Map("aluCtrl" -> ALUControlIE.ADD, "operandSelect.a" -> OperandType.PC, "operandSelect.b" -> OperandType.UImmediate)),
 
-        (Instructions.JAL, Map("operandSelect.a" -> OperandType.PC.asUInt, "operandSelect.b" -> OperandType.JImmediate.asUInt, "rdType" -> RdType.ConsecPC.asUInt, "frontendCtrl" -> FrontendControlIE.JAL.asUInt, "w1Wb" -> W1WritebackIE.EN.asUInt, "nextPc" -> PcType.Alu.asUInt)),
-        (Instructions.JALR, Map("operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt, "rdType" -> RdType.ConsecPC.asUInt, "frontendCtrl" -> FrontendControlIE.JALR.asUInt, "nextPc" -> PcType.Alu.asUInt)),
+        (Instructions.JAL, Map("operandSelect.a" -> OperandType.PC, "operandSelect.b" -> OperandType.JImmediate, "rdType" -> RdType.ConsecPC, "frontendCtrl" -> FrontendControlIE.JAL, "w1Wb" -> W1WritebackIE.EN, "nextPc" -> PcType.Alu)),
+        (Instructions.JALR, Map("operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate, "rdType" -> RdType.ConsecPC, "frontendCtrl" -> FrontendControlIE.JALR, "nextPc" -> PcType.Alu)),
 
-        (Instructions.BEQ, Map("aluCtrl" -> ALUControlIE.EQ.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt, "nextPc" -> PcType.Branch.asUInt, "writeRd" -> false.B)),
-        (Instructions.BNE, Map("aluCtrl" -> ALUControlIE.NE.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt, "nextPc" -> PcType.Branch.asUInt, "writeRd" -> false.B)),
-        (Instructions.BLT, Map("aluCtrl" -> ALUControlIE.SLT.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt, "nextPc" -> PcType.Branch.asUInt, "writeRd" -> false.B)),
-        (Instructions.BLTU, Map("aluCtrl" -> ALUControlIE.SLTU.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt, "nextPc" -> PcType.Branch.asUInt, "writeRd" -> false.B)),
-        (Instructions.BGE, Map("aluCtrl" -> ALUControlIE.GE.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt, "nextPc" -> PcType.Branch.asUInt, "writeRd" -> false.B)),
-        (Instructions.BGEU, Map("aluCtrl" -> ALUControlIE.GEU.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.Reg.asUInt, "nextPc" -> PcType.Branch.asUInt, "writeRd" -> false.B)),
+        (Instructions.BEQ, Map("aluCtrl" -> ALUControlIE.EQ, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "nextPc" -> PcType.Branch, "writeRd" -> false.B)),
+        (Instructions.BNE, Map("aluCtrl" -> ALUControlIE.NE, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "nextPc" -> PcType.Branch, "writeRd" -> false.B)),
+        (Instructions.BLT, Map("aluCtrl" -> ALUControlIE.SLT, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "nextPc" -> PcType.Branch, "writeRd" -> false.B)),
+        (Instructions.BLTU, Map("aluCtrl" -> ALUControlIE.SLTU, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "nextPc" -> PcType.Branch, "writeRd" -> false.B)),
+        (Instructions.BGE, Map("aluCtrl" -> ALUControlIE.GE, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "nextPc" -> PcType.Branch, "writeRd" -> false.B)),
+        (Instructions.BGEU, Map("aluCtrl" -> ALUControlIE.GEU, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "nextPc" -> PcType.Branch, "writeRd" -> false.B)),
 
-        (Instructions.SB, Map("lsuCtrl.lsSize" -> DataSize.Byte.asUInt, "lsuCtrl.isStore" -> StoreControl.EN.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.SImmediate.asUInt, "writeRd" -> false.B)),
-        (Instructions.SH, Map("lsuCtrl.lsSize" -> DataSize.HalfWord.asUInt, "lsuCtrl.isStore" -> StoreControl.EN.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.SImmediate.asUInt, "writeRd" -> false.B)),
-        (Instructions.SW, Map("lsuCtrl.lsSize" -> DataSize.Word.asUInt, "lsuCtrl.isStore" -> StoreControl.EN.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.SImmediate.asUInt, "writeRd" -> false.B)),
+        (Instructions.SB, Map("lsuCtrl.lsSize" -> DataSize.Byte, "lsuCtrl.isStore" -> StoreControl.EN, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.SImmediate, "writeRd" -> false.B)),
+        (Instructions.SH, Map("lsuCtrl.lsSize" -> DataSize.HalfWord, "lsuCtrl.isStore" -> StoreControl.EN, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.SImmediate, "writeRd" -> false.B)),
+        (Instructions.SW, Map("lsuCtrl.lsSize" -> DataSize.Word, "lsuCtrl.isStore" -> StoreControl.EN, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.SImmediate, "writeRd" -> false.B)),
 
-        (Instructions.LB, Map("lsuCtrl.lsSize" -> DataSize.Byte.asUInt, "lsuCtrl.isLoad" -> LoadControl.EN.asUInt, "lsuCtrl.isSigned" -> SignedControl.signed.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt, "useRd" -> true.B)),
-        (Instructions.LH, Map("lsuCtrl.lsSize" -> DataSize.HalfWord.asUInt, "lsuCtrl.isLoad" -> LoadControl.EN.asUInt, "lsuCtrl.isSigned" -> SignedControl.signed.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt, "useRd" -> true.B)),
-        (Instructions.LW, Map("lsuCtrl.lsSize" -> DataSize.Word.asUInt, "lsuCtrl.isLoad" -> LoadControl.EN.asUInt, "lsuCtrl.isSigned" -> SignedControl.signed.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt, "useRd" -> true.B)),
-        (Instructions.LBU, Map("lsuCtrl.lsSize" -> DataSize.Byte.asUInt, "lsuCtrl.isLoad" -> LoadControl.EN.asUInt, "lsuCtrl.isSigned" -> SignedControl.unsigned.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt, "useRd" -> true.B)),
-        (Instructions.LHU, Map("lsuCtrl.lsSize" -> DataSize.HalfWord.asUInt, "lsuCtrl.isLoad" -> LoadControl.EN.asUInt, "lsuCtrl.isSigned" -> SignedControl.unsigned.asUInt, "operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.IImmediate.asUInt, "useRd" -> true.B)),
+        (Instructions.LB, Map("lsuCtrl.lsSize" -> DataSize.Byte, "lsuCtrl.isLoad" -> LoadControl.EN, "lsuCtrl.isSigned" -> SignedControl.signed, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate, "useRd" -> true.B)),
+        (Instructions.LH, Map("lsuCtrl.lsSize" -> DataSize.HalfWord, "lsuCtrl.isLoad" -> LoadControl.EN, "lsuCtrl.isSigned" -> SignedControl.signed, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate, "useRd" -> true.B)),
+        (Instructions.LW, Map("lsuCtrl.lsSize" -> DataSize.Word, "lsuCtrl.isLoad" -> LoadControl.EN, "lsuCtrl.isSigned" -> SignedControl.signed, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate, "useRd" -> true.B)),
+        (Instructions.LBU, Map("lsuCtrl.lsSize" -> DataSize.Byte, "lsuCtrl.isLoad" -> LoadControl.EN, "lsuCtrl.isSigned" -> SignedControl.unsigned, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate, "useRd" -> true.B)),
+        (Instructions.LHU, Map("lsuCtrl.lsSize" -> DataSize.HalfWord, "lsuCtrl.isLoad" -> LoadControl.EN, "lsuCtrl.isSigned" -> SignedControl.unsigned, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate, "useRd" -> true.B)),
 
-        (Instructions.CSRRW, Map("operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.None.asUInt, "csrCtrl" -> CSRControl.RW.asUInt, "rdType" -> RdType.BypassCSR.asUInt)),
-        (Instructions.CSRRWI, Map("operandSelect.a" -> OperandType.CSRImmediate.asUInt, "operandSelect.b" -> OperandType.None.asUInt, "csrCtrl" -> CSRControl.RW.asUInt, "rdType" -> RdType.BypassCSR.asUInt)),
-        (Instructions.CSRRS, Map("operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.None.asUInt, "csrCtrl" -> CSRControl.RS.asUInt, "rdType" -> RdType.BypassCSR.asUInt)),
-        (Instructions.CSRRSI, Map("operandSelect.a" -> OperandType.CSRImmediate.asUInt, "operandSelect.b" -> OperandType.None.asUInt, "csrCtrl" -> CSRControl.RS.asUInt, "rdType" -> RdType.BypassCSR.asUInt)),
-        (Instructions.CSRRC, Map("operandSelect.a" -> OperandType.Reg.asUInt, "operandSelect.b" -> OperandType.None.asUInt, "csrCtrl" -> CSRControl.RC.asUInt, "rdType" -> RdType.BypassCSR.asUInt)),
-        (Instructions.CSRRCI, Map("operandSelect.a" -> OperandType.CSRImmediate.asUInt, "operandSelect.b" -> OperandType.None.asUInt, "csrCtrl" -> CSRControl.RC.asUInt, "rdType" -> RdType.BypassCSR.asUInt)),
+        (Instructions.CSRRW, Map("operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.None, "csrCtrl" -> CSRControl.RW, "rdType" -> RdType.BypassCSR)),
+        (Instructions.CSRRWI, Map("operandSelect.a" -> OperandType.CSRImmediate, "operandSelect.b" -> OperandType.None, "csrCtrl" -> CSRControl.RW, "rdType" -> RdType.BypassCSR)),
+        (Instructions.CSRRS, Map("operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.None, "csrCtrl" -> CSRControl.RS, "rdType" -> RdType.BypassCSR)),
+        (Instructions.CSRRSI, Map("operandSelect.a" -> OperandType.CSRImmediate, "operandSelect.b" -> OperandType.None, "csrCtrl" -> CSRControl.RS, "rdType" -> RdType.BypassCSR)),
+        (Instructions.CSRRC, Map("operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.None, "csrCtrl" -> CSRControl.RC, "rdType" -> RdType.BypassCSR)),
+        (Instructions.CSRRCI, Map("operandSelect.a" -> OperandType.CSRImmediate, "operandSelect.b" -> OperandType.None, "csrCtrl" -> CSRControl.RC, "rdType" -> RdType.BypassCSR)),
 
-        (Instructions.ECALL, Map("ecall" -> EcallIE.EN.asUInt)),
-        (Instructions.EBREAK, Map("ebreak" -> EbreakIE.EN.asUInt)),
+        (Instructions.ECALL, Map("ecall" -> EcallIE.EN)),
+        (Instructions.EBREAK, Map("ebreak" -> EbreakIE.EN)),
 
-        (Instructions.MRET, Map("frontendCtrl" -> FrontendControlIE.MRET.asUInt, "mret" -> MRetIE.EN.asUInt, "nextPc" -> PcType.MRet.asUInt)),
+        (Instructions.MRET, Map("frontendCtrl" -> FrontendControlIE.MRET, "mret" -> MRetIE.EN, "nextPc" -> PcType.MRet)),
 
-        (Instructions.FENCE, Map("fence" -> FenceEnableIE.EN.asUInt)),
-        (Instructions.FENCE_I, Map("flushICache" -> IcacheFlushIE.EN.asUInt)),
-        (Instructions.WFI, Map("wfi" -> WFIIE.EN.asUInt))
+        (Instructions.FENCE, Map("fence" -> FenceEnableIE.EN)),
+        (Instructions.FENCE_I, Map("flushICache" -> IcacheFlushIE.EN)),
+        (Instructions.WFI, Map("wfi" -> WFIIE.EN))
       )
 
       // Run all the tests

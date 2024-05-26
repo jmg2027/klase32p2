@@ -4,14 +4,14 @@ import chisel3._
 import chiseltest._
 import klas.KlasTest
 import klase32.config._
-import klase32.param.{DefaultConfig, KLASE32ParamKey}
+import klase32.param.{DefaultConfig, KlasE32ParamKey}
 
 class RegisterFileTest extends KlasTest {
   behavior of "RegisterFile"
 
   it should "correctly handle read and write operations" in {
     implicit val p: Parameters = new DefaultConfig() // Ensure this matches your configuration class
-    val k = p(KLASE32ParamKey)
+    val k = p(KlasE32ParamKey)
 
     test(new RegisterFile) { dut =>
       // Helper function to perform a write

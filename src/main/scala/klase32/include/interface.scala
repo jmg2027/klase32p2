@@ -10,7 +10,7 @@ import freechips.rocketchip.util._
 
 object Acc {
  class Request(implicit p: Parameters) extends Bundle {
-  val k = p(KLASE32ParamKey)
+  val k = p(KlasE32ParamKey)
 
   val addr = UInt(k.addrWidth.W)
   val id = UInt(k.accidWidth.W)
@@ -21,7 +21,7 @@ object Acc {
  }
 
  class Response(implicit p: Parameters) extends Bundle {
-  val k = p(KLASE32ParamKey)
+  val k = p(KlasE32ParamKey)
 
   val id = UInt(k.accidWidth.W)
   val data = UInt(k.accdataWidth.W)
@@ -81,14 +81,14 @@ class Stall extends StallBundle {
 }
 
 class ExternalMemoryInterfaceReq(implicit p: Parameters) extends Bundle {
- val k = p(KLASE32ParamKey)
+ val k = p(KlasE32ParamKey)
 
  val addr = UInt(k.dataWidth.W)
  val numByte = UInt(2.W)
 }
 
 class ExternalMemoryInterfaceResp(implicit p: Parameters) extends Bundle {
- val k = p(KLASE32ParamKey)
+ val k = p(KlasE32ParamKey)
  val rdata = UInt(k.dataWidth.W)
 }
 
@@ -101,7 +101,7 @@ class HeartXcpt extends Bundle {
 }
 
 class EpmIntf(implicit p: Parameters) extends CoreBundle {
- val k = p(KLASE32ParamKey)
+ val k = p(KlasE32ParamKey)
 
  val cmd = Output(UInt(5.W))
  val req = Output(Bool())
@@ -119,7 +119,7 @@ class EpmIntf(implicit p: Parameters) extends CoreBundle {
 }
 
 class FetchQueueEntry(implicit p: Parameters) extends CoreBundle {
- val k = p(KLASE32ParamKey)
+ val k = p(KlasE32ParamKey)
 
  val data = UInt(k.fetchWidth.W)
  val xcpt = new HeartXcpt
@@ -127,7 +127,7 @@ class FetchQueueEntry(implicit p: Parameters) extends CoreBundle {
 
 
 class StoreBufferEntry(implicit p: Parameters) extends CoreBundle {
- val k = p(KLASE32ParamKey)
+ val k = p(KlasE32ParamKey)
 
  val addr = UInt(k.addrWidth.W)
  val data = UInt(xLen.W)
@@ -135,7 +135,7 @@ class StoreBufferEntry(implicit p: Parameters) extends CoreBundle {
 }
 
 class EdmIntf(implicit p: Parameters) extends CoreBundle {
- val k = p(KLASE32ParamKey)
+ val k = p(KlasE32ParamKey)
  val maskBits = k.dataWidth / 8
 
  val cmd = Output(UInt(5.W)) // with dm_st_req or dm_ld_req

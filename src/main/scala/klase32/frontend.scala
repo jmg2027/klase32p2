@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
-import klase32.param.KLASE32ParamKey
+import klase32.param.KlasE32ParamKey
 
 class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
   val ctrl = Input(FrontendControlIE())
@@ -38,7 +38,7 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
 
 class Frontend(implicit p: Parameters) extends CoreModule {
   import FrontendControlIE._
-  val k = p(KLASE32ParamKey)
+  val k = p(KlasE32ParamKey)
 
   val io = IO(new FrontendIO())
 
