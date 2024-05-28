@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
-import klase32.param.KlasE32ParamKey
+import klase32.param.KLASE32ParamKey
 import snitch.enums.SnitchEnum
 
 trait ControlEnum extends SnitchEnum
@@ -52,9 +52,14 @@ object FrontendControlIE extends ControlDefaultEnum {
 }
 
 object W1WritebackIE extends ControlDefaultEnableEnum
-  // Write to GPR with no TCM latency, not from lsu
+// Write to GPR with no TCM latency, not from lsu
 
-object IllegalInstIE extends ControlDefaultEnableEnum
+object IllegalInstIE extends ControlEnum {
+  val normal = Value
+  val illegal = Value
+
+  override val default = this.illegal
+}
 
 object WFIIE extends ControlDefaultEnableEnum
 
