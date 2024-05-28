@@ -6,7 +6,7 @@ import chisel3.util._
 import chisel3.util.experimental.decode.{DecodeField, DecodePattern, DecodeTable}
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
-import klase32.param.KlasE32ParamKey
+import klase32.param.KLASE32ParamKey
 import klase32.Instructions._
 import snitch.enums._
 
@@ -63,7 +63,7 @@ class DecoderIO(implicit p: Parameters) extends CoreBundle {
 }
 
 class Decoder(implicit p: Parameters) extends CoreModule {
-  val k = p(KlasE32ParamKey)
+  val k = p(KLASE32ParamKey)
 
   val io = IO(new DecoderIO)
 
@@ -81,7 +81,6 @@ class Decoder(implicit p: Parameters) extends CoreModule {
 
     RdField -> d.rdType,
     W1WritebackField -> d.w1Wb,
-//    W2WritebackField -> d.w2Wb,
 
     CtrlControlIEField -> d.frontendCtrl,
 
@@ -102,8 +101,6 @@ class Decoder(implicit p: Parameters) extends CoreModule {
     // MPYMDField -> d.mpyCtrl,
   )
 
-//  d.useRD := DontCare
-
   val instTable =
     RV32IDecode.table ++
       // RV32CDecode.table ++
@@ -111,6 +108,7 @@ class Decoder(implicit p: Parameters) extends CoreModule {
 
   val decodeTable = new DecodeTable(instTable, decodeMapping.unzip._1)
   val decodedInst = decodeTable.decode(io.inst)
+  printf(cf"$decodedInst\n")
 
   // Set Output
   decodeMapping.map {
@@ -121,6 +119,8 @@ class Decoder(implicit p: Parameters) extends CoreModule {
   d.rd := instValue.rd
   d.rs1 := instValue.rs1
   d.rs2 := instValue.rs2
+  printf(cf"${io.decSig.lsuCtrl.isStore}\n")
+  printf(cf"${io.inst(24, 20)}\n")
 
   d.imm.i := instValue.iimm.asSInt
   d.imm.s := instValue.simm.asSInt
