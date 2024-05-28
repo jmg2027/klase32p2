@@ -4,12 +4,12 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
-import klase32.param.KlasE32ParamKey
+import klase32.param.KLASE32ParamKey
 
 class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
   val ctrl = Input(FrontendControlIE())
 
-  val if_pc = Input(UInt(mxLen.W)) // Current PC
+  val if_pc = Output(UInt(mxLen.W)) // Current PC
   // val ie_pc = Input(UInt(mxLen.W)) // 1 cycle before PC
   val evec = Input(UInt(mxLen.W))
   val cnd = Input(Bool())
@@ -22,8 +22,6 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
   val aluR = Input(UInt(mxLen.W))
 
   val issue = Output(Bool())
-
-  val pcRegWrite = Output(Valid(UInt(mxLen.W))) // Next PC
 
   val instPacket = Output(new Bundle {
     val inst = UInt(wordsize.W)
@@ -38,7 +36,7 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
 
 class Frontend(implicit p: Parameters) extends CoreModule {
   import FrontendControlIE._
-  val k = p(KlasE32ParamKey)
+  val k = p(KLASE32ParamKey)
 
   val io = IO(new FrontendIO())
 
@@ -91,27 +89,25 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val jalrIE = jalrCond && !io.stall
   val jump = brIE || jalIE || jalrIE || regBooting
 
-  val jumpPC = Mux(brIE || jalIE || jalrIE, io.aluR, io.if_pc)
+  val jumpPC = io.aluR
 
-  val pcWrite = Mux(jump, jumpPC, io.if_pc + Mux(!(instIF(1) && instIF(0)), 2.U, 4.U))
+  val pcWrite = Wire(UInt())
 
-  when(jump || issue) {
-    io.pcRegWrite.valid := true.B
-    io.pcRegWrite.bits := pcWrite
-  } otherwise {
-    io.pcRegWrite.valid := false.B
-    io.pcRegWrite.bits := 0.U
-  }
-
-  // Fetch PC
-
-  val issueLength = Mux((!(io.epm.data(0) && io.epm.data(1))), 2.U, 4.U)
-  val fetch = fq.io.enq.ready
-
+  // PC Register
   val bootAddrWire = WireDefault(bootAddrParam.U)
   if (usingOuterBoodAddr) {
-    val bootAddrWire = io.epm.bootAddr
+    bootAddrWire := io.epm.bootAddr
   }
+
+  val pcReg = RegEnable(pcWrite, bootAddrWire, (jump || issue) && !io.stall)
+  io.if_pc := pcReg
+  printf(cf"pc: $pcReg")
+
+  pcWrite := Mux(jump, jumpPC, pcReg + 4.U)
+
+  // Fetch PC
+  val issueLength = Mux((!(io.epm.data(0) && io.epm.data(1))), 2.U, 4.U)
+  val fetch = fq.io.enq.ready
   //  val fetchPC = RegInit(bootAddrWire.asUInt, UInt(mxLen.W))
   // FIXME: MUX
   val fetchPC = Reg(UInt(mxLen.W))
