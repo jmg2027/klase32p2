@@ -5,7 +5,6 @@ import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import chisel3.util.BitPat.bitPatToUInt
 import klase32.config._
-import klase32.param.KlasE32ParamKey
 
 // Thanks to d.hyun.ahn
 

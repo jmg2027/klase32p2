@@ -5,7 +5,6 @@ import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import klase32.config._
 import chisel3.util.log2Ceil
-import klase32.param.KlasE32ParamKey
 import scala.language.experimental.macros
 
 class QueueWithAccessableEntry[T <: Data](

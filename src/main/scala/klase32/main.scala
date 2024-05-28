@@ -3,7 +3,7 @@ package klase32
 import chisel3._
 import chisel3.stage.{ChiselStage, ChiselGeneratorAnnotation}
 import klase32.config.Parameters
-import klase32.param.{DefaultConfig, KlasE32ParamKey}
+import klase32.param.{DefaultConfig, KLASE32ParamKey}
 
 object Main extends App {
   implicit val p: Parameters = (new DefaultConfig).toInstance

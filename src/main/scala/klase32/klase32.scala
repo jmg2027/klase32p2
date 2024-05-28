@@ -4,13 +4,10 @@ import chisel3._
 import chisel3.util._
 import chisel3.util.BitPat.bitPatToUInt
 import klase32.config._
-import klase32.param.KlasE32ParamKey
 import snitch.enums.{OperandType, RdType}
 import freechips.rocketchip.rocket.Causes
 
 class KLASE32IO(implicit p: Parameters) extends Bundle with KLASE32IOEtc {
-  val k = p(KlasE32ParamKey)
-
   //  val acc = new Acc.Interface
   val interrupt = Input(new Interrupt)
   val edm = new EdmIntf
@@ -62,16 +59,9 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   val stallME = stallSig.me.orR
   val stall = stallIE && stallME
 
-
-  // PC Register
-  val bootAddrWire = WireInit(bootAddrParam.U)
-  if (usingOuterBoodAddr) { val bootAddrWire = io.epm.bootAddr}
-  val pcReg = RegEnable(frontend.io.pcRegWrite.bits, bootAddrWire, frontend.io.pcRegWrite.valid && !stall)
-
-
   // Pipeline
   val ie_inst = RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall)
-  val ie_pc = RegEnable(pcReg,!stall)
+  val ie_pc = RegEnable(frontend.io.if_pc, !stall)
 
   val me_inst = RegEnable(ie_inst, bitPatToUInt(NOP), !stallME)
   val me_pc = RegEnable(ie_pc, !stallME)
@@ -93,7 +83,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     (lsu.io.stXcpt.pf, Causes.store_page_fault.U),
     (lsu.io.stXcpt.gf, Causes.store_guest_page_fault.U),
     (lsu.io.stXcpt.ae, Causes.store_access.U),
-    (ctrlSig.illegal === IllegalInstIE.EN, Causes.illegal_instruction.U),
+    (ctrlSig.illegal === IllegalInstIE.illegal, Causes.illegal_instruction.U),
     (ctrlSig.ecall === EcallIE.EN, Causes.machine_ecall.U),
     (ctrlSig.ebreak === EbreakIE.EN, Causes.breakpoint.U),
   ))
@@ -122,7 +112,6 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   frontend.io.divBusy := DontCare
 
-  frontend.io.if_pc := pcReg
   frontend.io.evec := csr.io.evec
   frontend.io.cnd := alu.io.F
   frontend.io.exception := meXcpt
@@ -151,7 +140,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   reg.io.wp(0).bits.data := Mux1H(Seq(
     RdType.Alu -> alu.io.R,
-    RdType.ConsecPC -> (pcReg + 4.U),
+    RdType.ConsecPC -> (frontend.io.if_pc + 4.U),
     RdType.BypassCSR -> csr.io.rd
   ).map {case(k, v) => (k === ctrlSig.rdType, v)})
   reg.io.wp(1).bits.data := lsu.io.rddata

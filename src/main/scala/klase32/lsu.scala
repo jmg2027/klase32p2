@@ -5,14 +5,14 @@ import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 import chisel3.util.BitPat.bitPatToUInt
 import klase32.config._
-import klase32.param.KlasE32ParamKey
+import klase32.param.KLASE32ParamKey
 import snitch.enums.DataSize
 import freechips.rocketchip.rocket.constants.MemoryOpConstants
 import freechips.rocketchip.rocket.Causes
 
 
 class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
-  val k = p(KlasE32ParamKey)
+  val k = p(KLASE32ParamKey)
 
   val io = IO(new Bundle{
     val lsuctrlIE = Input(new LSUControl)
@@ -88,7 +88,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   io.edm.ld_vaddr := addrAligned
   io.edm.ld_kill := DontCare
   io.edm.ld_mmio_kill := DontCare
-  io.loadFull := RegEnable(!io.edm.ld_ack, io.edm.ld_req)
+  io.loadFull := !io.edm.ld_ack && io.edm.ld_req
 
   // Store request issues from store buffer
   io.edm.st_req := sb.io.deq.valid

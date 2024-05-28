@@ -13,25 +13,48 @@ class FrontendTest extends KlasTest {
 
   it should "correctly handle control flows and fetch operations" in {
     test(new Frontend) { dut =>
-      // Initialize all input signals to 0
-      dut.io.ctrl.poke(FrontendControlIE.default)
-      dut.io.evec.poke(0)
-      dut.io.cnd.poke(false)
-      dut.io.exception.poke(false)
-      dut.io.eret.poke(false)
-      dut.io.divBusy.poke(false)
-      dut.io.stall.poke(false)
-      dut.io.aluR.poke(0)
-      dut.io.flushEn.poke(IcacheFlushIE.default)
-      dut.io.epm.bootAddr.poke(0)
-      dut.io.epm.data.poke(0)
-      dut.io.epm.xcpt.poke(chiselTypeOf(dut.io.epm.xcpt).Lit(
-        _.loc -> false.B,
-        _.ma -> false.B,
-        _.pf -> false.B,
-        _.gf -> false.B,
-        _.ae -> false.B
-      ))
+      def initializeDut(): Unit = {
+        // Initialize all input signals to 0
+        dut.io.ctrl.poke(FrontendControlIE.default)
+        dut.io.evec.poke(0)
+        dut.io.cnd.poke(false)
+        dut.io.exception.poke(false)
+        dut.io.eret.poke(false)
+        dut.io.divBusy.poke(false)
+        dut.io.stall.poke(false)
+        dut.io.aluR.poke(0)
+        dut.io.flushEn.poke(IcacheFlushIE.default)
+        dut.io.epm.bootAddr.poke(0)
+        dut.io.epm.data.poke(0)
+        dut.io.epm.xcpt.poke(chiselTypeOf(dut.io.epm.xcpt).Lit(
+          _.loc -> false.B,
+          _.ma -> false.B,
+          _.pf -> false.B,
+          _.gf -> false.B,
+          _.ae -> false.B
+        ))
+      }
+
+      def epmResponse(data: Int): Unit = {
+        dut.clock.step(1)
+        dut.io.epm.data.poke(data.U)
+        dut.io.epm.ack.poke(true.B)
+      }
+
+      def checkEpmRequest(addr: Int): Unit = {
+        dut.io.epm.req.expect(true)
+        dut.io.epm.addr.expect(addr)
+      }
+
+      def checkIssue(): Unit = {
+        dut.io.issue.expect(true)
+      }
+
+      def checkPc(pc: Int): Unit = {
+        dut.io.if_pc.expect(pc)
+      }
+
+      initializeDut()
 
       // Set initial fetchPC to boot address
       val bootAddr = 0x1000
@@ -68,7 +91,6 @@ class FrontendTest extends KlasTest {
       // Cycle 4: Jump handling (JAL)
       dut.io.ctrl.poke(FrontendControlIE.JAL)
       dut.io.aluR.poke(0x3000) // Jump address
-      dut.io.cnd.poke(true)
       dut.clock.step(1)
       dut.io.if_pc.expect(0x3000)
       dut.io.epm.req.expect(true) // EPM request should be true after jump

@@ -108,7 +108,6 @@ class Decoder(implicit p: Parameters) extends CoreModule {
 
   val decodeTable = new DecodeTable(instTable, decodeMapping.unzip._1)
   val decodedInst = decodeTable.decode(io.inst)
-  printf(cf"$decodedInst\n")
 
   // Set Output
   decodeMapping.map {
@@ -119,15 +118,12 @@ class Decoder(implicit p: Parameters) extends CoreModule {
   d.rd := instValue.rd
   d.rs1 := instValue.rs1
   d.rs2 := instValue.rs2
-  printf(cf"${io.decSig.lsuCtrl.isStore}\n")
-  printf(cf"${io.inst(24, 20)}\n")
 
   d.imm.i := instValue.iimm.asSInt
   d.imm.s := instValue.simm.asSInt
   d.imm.b := instValue.bimm.asSInt
   d.imm.u := instValue.uimm.asSInt
   d.imm.j := instValue.jimm.asSInt
-
 }
 
 case class InstParser(data: UInt) {

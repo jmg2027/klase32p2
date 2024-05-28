@@ -10,7 +10,6 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
   val ctrl = Input(FrontendControlIE())
 
   val if_pc = Output(UInt(mxLen.W)) // Current PC
-  // val ie_pc = Input(UInt(mxLen.W)) // 1 cycle before PC
   val evec = Input(UInt(mxLen.W))
   val cnd = Input(Bool())
   val exception = Input(Bool())
@@ -47,15 +46,19 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val jalCond = (io.ctrl === JAL)
   val jalrCond = (io.ctrl === JALR) | (io.ctrl === MRET)
 
-  // After 1 cycle fetch will start
-  val bootingUpdate = WireDefault(false.B)
-  val booting = WireDefault(false.B)
-  val regBooting = RegEnable(bootingUpdate, true.B, booting)
-
-  when(regBooting) {
-    booting := true.B
-    bootingUpdate := false.B
+  // After n cycle fetch will start
+  val n = 1 // booting cycle
+  val bootingCounter = RegInit(0.U(log2Ceil(n).W))
+  val regBooting = RegInit(true.B)
+  when(reset.asBool) {
+    regBooting := true.B
+    bootingCounter := 0.U
+  }.elsewhen(regBooting && bootingCounter === (n - 1).U) {
+    regBooting := false.B
+  }.elsewhen(regBooting) {
+    bootingCounter := bootingCounter + 1.U
   }
+
   // Fetch Queue
   // FIXME: Support for C extension
   // For now 32-bit N entries
