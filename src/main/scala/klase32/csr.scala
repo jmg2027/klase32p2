@@ -116,9 +116,9 @@ object CSR {
   }
   class CSRReg(val defaultValue: UInt = 0.U)(implicit p: Parameters) extends CoreCSRReg[CSRField.CSRReg] {
     override def field = new CSRField.CSRReg
-//    class Field extends Bundle {
-//      val data = UInt(csrWidthM.W)
-//    }
+    //    class Field extends Bundle {
+    //      val data = UInt(csrWidthM.W)
+    //    }
 
     def default = defaultValue
   }
@@ -128,7 +128,7 @@ object CSR {
     override def field = new CSRField.MStatus
 
     def default = 0.U
-//    override val reg = RegInit(field, default.asTypeOf(field))
+    //    override val reg = RegInit(field, default.asTypeOf(field))
   }
 
   // v1.12
