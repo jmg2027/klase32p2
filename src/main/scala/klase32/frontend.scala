@@ -47,12 +47,11 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val jalCond = (io.ctrl === JAL)
   val jalrCond = (io.ctrl === JALR) | (io.ctrl === MRET)
 
-  val bootingUpdate = Wire(Bool())
-  val booting = Wire(Bool())
-  val regBooting = RegEnable(booting && !io.stall, 1.B, bootingUpdate)
+  // After 1 cycle fetch will start
+  val bootingUpdate = WireDefault(false.B)
+  val booting = WireDefault(false.B)
+  val regBooting = RegEnable(bootingUpdate, true.B, booting)
 
-  bootingUpdate := false.B
-  booting := false.B
   when(regBooting) {
     booting := true.B
     bootingUpdate := false.B
@@ -87,31 +86,39 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val brIE = brCond && !io.stall
   val jalIE = jalCond && !io.stall
   val jalrIE = jalrCond && !io.stall
-  val jump = brIE || jalIE || jalrIE || regBooting
+//  val jump = brIE || jalIE || jalrIE || regBooting
+  val jump = brIE || jalIE || jalrIE
 
   val jumpPC = io.aluR
 
   val pcWrite = Wire(UInt())
 
-  // PC Register
   val bootAddrWire = WireDefault(bootAddrParam.U)
   if (usingOuterBoodAddr) {
     bootAddrWire := io.epm.bootAddr
   }
 
+  // PC Register
+  // Address of current instruction in IF stage
   val pcReg = RegEnable(pcWrite, bootAddrWire, (jump || issue) && !io.stall)
   io.if_pc := pcReg
-  printf(cf"pc: $pcReg")
+  printf(cf"pc: $pcReg\n")
+  printf(cf"pcw: $pcWrite\n")
+  printf(cf"jump: $jump\n")
+  printf(cf"issue: $issue\n")
+  printf(cf"boot: $regBooting\n")
+  printf(cf"fq: ${fq.io.deq.valid}\n")
+  printf(cf"stall: ${io.stall}\n")
 
   pcWrite := Mux(jump, jumpPC, pcReg + 4.U)
 
   // Fetch PC
-  val issueLength = Mux((!(io.epm.data(0) && io.epm.data(1))), 2.U, 4.U)
-  val fetch = fq.io.enq.ready
-  //  val fetchPC = RegInit(bootAddrWire.asUInt, UInt(mxLen.W))
+  val issueLength = 4.U
+  val fetch = WireDefault(false.B)
+  fetch := fq.io.enq.ready && !regBooting
   // FIXME: MUX
   val fetchPC = Reg(UInt(mxLen.W))
-  when (reset.asBool) {
+  when (reset.asBool && regBooting) {
     fetchPC := bootAddrWire
     fq.flush := true.B
   }.elsewhen(io.exception || io.eret) {
@@ -120,12 +127,16 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   }.elsewhen (jump) {
     fetchPC := jumpPC
     fq.flush := true.B
-  }.otherwise {
+  }.elsewhen(issue) {
     fetchPC := fetchPC + issueLength
+    fq.flush := false.B
+  }.otherwise {
+    fetchPC := fetchPC
     fq.flush := false.B
   }
 
-  io.epm.addr := Mux(fetch, fetchPC, 0.U)
+  io.epm.addr := fetchPC
+  printf(cf"${io.epm.addr}\n")
   io.epm.req := fetch
   io.epm.flush := io.flushEn.asUInt.orR
   io.epm.cmd := 0.U // int load
