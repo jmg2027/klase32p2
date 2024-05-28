@@ -103,12 +103,6 @@ object RdField extends InstEnumField(RdType) {
   override def typeChecker = _.isInstanceOf[RdProperty]
 }
 
-case class WriteRdProperty(op: Bool) extends InstProperty(op)
-object WriteRdField extends InstBoolField {
-  override def name = "write rd"
-  override def typeChecker = _.isInstanceOf[WriteRdProperty]
-}
-
 case class W1WritebackProperty(op: W1WritebackIE.Type) extends InstProperty(op)
 object W1WritebackField extends InstEnumField(W1WritebackIE) {
   override def name = "w1 writeback"
@@ -245,15 +239,15 @@ case class AluCompProperty(alu: ALUControlIE.Type, a: OperandType.Type, b: Opera
 
 case class BranchCompProperty(alu: ALUControlIE.Type) extends InstProperty(
   AluCompProperty(alu, OperandType.Reg, OperandType.Reg) ++
-    NextPcProperty(PcType.Branch) ++
-    WriteRdProperty(false.B)
+    CtrlControlIEProperty(FrontendControlIE.BR) ++
+    W1WritebackProperty(W1WritebackIE.EN)
 )
 
 case class StoreCompProperty(lsSize: DataSize.Type) extends InstProperty(
   OpCompProperty(OperandType.Reg, OperandType.SImmediate) ++
     StoreProperty(StoreControl.EN) ++
     LsSizeProperty(lsSize) ++
-    WriteRdProperty(false.B)
+    W1WritebackProperty(W1WritebackIE.EN)
 )
 
 case class LoadCompProperty(lsSize: DataSize.Type, isSigned: SignedControl.Type = SignedControl.signed) extends InstProperty(
@@ -264,9 +258,9 @@ case class LoadCompProperty(lsSize: DataSize.Type, isSigned: SignedControl.Type 
     UseRdProperty(true.B)
 )
 
-case class RetCompProperty(nextPc: PcType.Type) extends InstProperty(
-  WriteRdProperty(false.B) ++
-    NextPcProperty(nextPc)
+case class RetCompProperty(frontendControl: FrontendControlIE.Type) extends InstProperty(
+  W1WritebackProperty(W1WritebackIE.EN) ++
+    CtrlControlIEProperty(frontendControl)
 )
 
 abstract trait InstDecode {
@@ -303,14 +297,14 @@ object RV32IDecode extends InstDecode {
     new InstPattern(JAL,
       OpCompProperty(OperandType.PC, OperandType.JImmediate) ++
         RdProperty(RdType.ConsecPC) ++
-        NextPcProperty(PcType.Alu) ++
+        CtrlControlIEProperty(FrontendControlIE.JAL) ++
         W1WritebackProperty(W1WritebackIE.EN)
     ),
 
     new InstPattern(JALR,
       OpCompProperty(OperandType.Reg, OperandType.IImmediate) ++
         RdProperty(RdType.ConsecPC) ++
-        NextPcProperty(PcType.Alu)
+        CtrlControlIEProperty(FrontendControlIE.JALR)
     ),
 
     new InstPattern(BEQ, BranchCompProperty(ALUControlIE.EQ)),
@@ -364,13 +358,13 @@ object RV32IDecode extends InstDecode {
     new InstPattern(ECALL, ECallProperty(EcallIE.EN)),
     new InstPattern(EBREAK, EBreakProperty(EbreakIE.EN)),
 
-    new InstPattern(SRET, RetCompProperty(PcType.SRet)
+    new InstPattern(SRET, RetCompProperty(FrontendControlIE.MRET)
       ++ SRetProperty(true.B)),
-    new InstPattern(MRET, RetCompProperty(PcType.MRet)
+    new InstPattern(MRET, RetCompProperty(FrontendControlIE.MRET)
       ++ MRetProperty(MRetIE.EN)),
 
     new InstPattern(FENCE,
-      WriteRdProperty(false.B) ++
+      W1WritebackProperty(W1WritebackIE.EN) ++
         FenceProperty(FenceEnableIE.EN)
     ),
     new InstPattern(FENCE_I, FlushICacheProperty(IcacheFlushIE.EN)),
@@ -383,7 +377,7 @@ object RV32IDecode extends InstDecode {
 case class AmoCompProperty(amo: AMOType.Type) extends InstProperty(
   // AluCompProperty(ALUControlIE.BypassA, OperandType.Reg, OperandType.Reg) ++
   OpCompProperty(OperandType.Reg, OperandType.Reg) ++
-    WriteRdProperty(false.B) ++
+    W1WritebackProperty(W1WritebackIE.EN) ++
     UseRdProperty(true.B) ++
     LoadProperty(LoadControl.EN) ++
     SignedProperty(SignedControl.signed) ++
@@ -414,7 +408,7 @@ object RV32ADecode extends InstDecode {
 
 case class MulDivCompProperty() extends InstProperty(
   OpCompProperty(OperandType.Reg, OperandType.Reg) ++
-    WriteRdProperty(false.B) ++
+    W1WritebackProperty(W1WritebackIE.EN) ++
     UseRdProperty(true.B) ++
     AccValidProperty(true.B) ++
     AccUseRdProperty(true.B) ++
