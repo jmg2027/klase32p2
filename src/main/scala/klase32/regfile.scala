@@ -24,6 +24,11 @@ class RegisterFile(implicit p: Parameters) extends CoreModule with HasCoreParame
   val io = IO(new RegisterFileIO())
   val regFile = Mem(regNum, UInt(mxLen.W))
 
+  for(i <- 0 until regNum) {
+    printf(cf"x$i:\t\t${regFile(i)}%x\n")
+  }
+
+
   for (i <- 0 until readportNum) {
     when (io.rp(i).addr === 0.U) { 
       io.rp(i).data := 0.U 

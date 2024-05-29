@@ -69,6 +69,7 @@ class StallBundle extends Bundle {
 
 class Stall extends StallBundle {
  val ie = new StallBundle {
+  val issue = Bool()
   val store = Bool()
   val csr = Bool()
  }

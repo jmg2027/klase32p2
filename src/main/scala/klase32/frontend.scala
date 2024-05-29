@@ -74,6 +74,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   // Issue
   val issueable = !io.stall && !io.divBusy
+  // val issueable = !io.divBusy
   /* FIXME: RVC
   Fetch queue will fetch fetchwidth. fetchqueue should store 2 bytes align
   Extended instruction will be issued: 32 bits
@@ -105,13 +106,13 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // Address of current instruction in IF stage
   val pcReg = RegEnable(pcWrite, bootAddrWire, (jump || issue) && !io.stall)
   io.if_pc := pcReg
-  printf(cf"pc: $pcReg\n")
-  printf(cf"pcw: $pcWrite\n")
+  printf(cf"pc: 0x$pcReg%x\n")
+  // printf(cf"pcw: 0x$pcWrite%x\n")
   printf(cf"jump: $jump\n")
   printf(cf"issue: $issue\n")
-  printf(cf"boot: $regBooting\n")
-  printf(cf"fq: ${fq.io.deq.valid}\n")
-  printf(cf"stall: ${io.stall}\n")
+  // printf(cf"boot: $regBooting\n")
+  // printf(cf"fq: ${fq.io.deq.valid}\n")
+  // printf(cf"stall: ${io.stall}\n")
 
   pcWrite := Mux(jump, jumpPC, pcReg + 4.U)
 
@@ -121,7 +122,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   fetch := fq.io.enq.ready && !regBooting
   // FIXME: MUX
   val fetchPC = Reg(UInt(mxLen.W))
-  when (reset.asBool && regBooting) {
+  when (reset.asBool || regBooting) {
     fetchPC := bootAddrWire
     fq.flush := true.B
   }.elsewhen(io.exception || io.eret) {
@@ -139,7 +140,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   }
 
   io.epm.addr := fetchPC
-  printf(cf"${io.epm.addr}\n")
+  printf(cf"fetchPC: 0x${io.epm.addr}%x\n")
   io.epm.req := fetch
   io.epm.flush := io.flushEn.asUInt.orR
   io.epm.cmd := 0.U // int load

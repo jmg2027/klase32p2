@@ -234,20 +234,20 @@ case class OpCompProperty(a: OperandType.Type, b: OperandType.Type) extends Inst
 
 case class AluCompProperty(alu: ALUControlIE.Type, a: OperandType.Type, b: OperandType.Type) extends InstProperty(
   AluProperty(alu) ++
-    OpCompProperty(a, b)
+    OpCompProperty(a, b) ++
+    W1WritebackProperty(W1WritebackIE.EN)
 )
 
 case class BranchCompProperty(alu: ALUControlIE.Type) extends InstProperty(
   AluCompProperty(alu, OperandType.Reg, OperandType.Reg) ++
-    CtrlControlIEProperty(FrontendControlIE.BR) ++
-    W1WritebackProperty(W1WritebackIE.EN)
+    CtrlControlIEProperty(FrontendControlIE.BR)
 )
 
 case class StoreCompProperty(lsSize: DataSize.Type) extends InstProperty(
   OpCompProperty(OperandType.Reg, OperandType.SImmediate) ++
     StoreProperty(StoreControl.EN) ++
-    LsSizeProperty(lsSize) ++
-    W1WritebackProperty(W1WritebackIE.EN)
+    LsSizeProperty(lsSize)
+    // W1WritebackProperty(W1WritebackIE.EN)
 )
 
 case class LoadCompProperty(lsSize: DataSize.Type, isSigned: SignedControl.Type = SignedControl.signed) extends InstProperty(
@@ -255,6 +255,7 @@ case class LoadCompProperty(lsSize: DataSize.Type, isSigned: SignedControl.Type 
     LoadProperty(LoadControl.EN) ++
     SignedProperty(isSigned) ++
     LsSizeProperty(lsSize) ++
+    W1WritebackProperty(W1WritebackIE.EN) ++
     UseRdProperty(true.B)
 )
 

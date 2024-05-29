@@ -357,7 +357,6 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     // when (csrAddr(CSRAddr.misa)) {}
     when(csrAddr(CSRAddr.medeleg)) {
       csr.medeleg.write(wdata)
-      printf(cf"medeleg reg: ${csr.medeleg.reg}\n")
     }
     when(csrAddr(CSRAddr.mideleg)) {
       csr.mideleg.write(wdata)
@@ -431,8 +430,6 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     (csr.mip.reg.mtip && csr.mie.reg.mtip) -> 7.U,
     (csr.mip.reg.msip && csr.mie.reg.msip) -> 3.U,
   ))
-
-  printf(cf"MIE: ${csr.mie.reg}\n")
 
   // WFI
   // FIXME: CLK Gating

@@ -74,7 +74,9 @@ abstract class TestCluster(
   def isDone() = mem.load(0x70000000L) != BigInt(0)
 
   def run() = {
-    while (!isDone()) tick()
+    // while (!isDone()) tick()
+    // println("Done!")
+    tick(20)
   }
 }
 

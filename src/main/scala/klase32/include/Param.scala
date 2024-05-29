@@ -21,9 +21,9 @@ object param {
                                usingHypervisor: Boolean = false,
                                usingUser: Boolean = false,
 
-                               usingOuterBoodAddr: Boolean = true,
+                               usingOuterBoodAddr: Boolean = false,
 
-                               bootAddr: BigInt = BigInt(65000),
+                               bootAddr: BigInt = BigInt(0x80000000L),
 
                                mxLen: Int = 32,
                                sxLen: Int = 32,
@@ -65,6 +65,7 @@ object param {
 
 trait HasCoreParameters {
   implicit val p: Parameters
+
   def coreParams = p(KLASE32ParamKey).core
 
   val wordsize: Int = 32
