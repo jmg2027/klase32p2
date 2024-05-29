@@ -17,7 +17,6 @@ class KLASE32IO(implicit p: Parameters) extends Bundle with KLASE32IOEtc {
 }
 
 trait KLASE32IOEtc extends Bundle {
-  val resetValue = Input(UInt(32.W))
   val powerdown = Output(Bool())
 }
 
