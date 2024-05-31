@@ -34,7 +34,9 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
 
 
 class Frontend(implicit p: Parameters) extends CoreModule {
+
   import FrontendControlIE._
+
   val k = p(KLASE32ParamKey)
 
   val io = IO(new FrontendIO())
@@ -64,6 +66,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // For now 32-bit N entries
   // To extend to compressed mode, fetch queue should handle 16-bit data
   // when empty, enq data will be dequeued instantly
+  // FIXME: Should req & ack be dealt with token protocol?
   val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = true, hasFlush = true))
   fq.io.enq.bits.data := io.epm.data
   fq.io.enq.bits.xcpt := io.epm.xcpt
@@ -73,13 +76,14 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   //  def isRVC(inst: UInt): Bool = !(inst(1) && inst(0))
 
   // Issue
-  val issueable = !io.stall && !io.divBusy
-  // val issueable = !io.divBusy
+  //  val issueable = !io.stall && !io.divBusy
+  val issueable = !io.divBusy
   /* FIXME: RVC
   Fetch queue will fetch fetchwidth. fetchqueue should store 2 bytes align
   Extended instruction will be issued: 32 bits
    */
   val instrAvail = fq.io.deq.valid && !regBooting
+//  val instrAvail = fq.io.deq.fire && !regBooting
   // When fq being flushed, NOP is issued(1 cycle stall)
   val issue = instrAvail && issueable
 
@@ -90,7 +94,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val brIE = brCond && !io.stall
   val jalIE = jalCond && !io.stall
   val jalrIE = jalrCond && !io.stall
-//  val jump = brIE || jalIE || jalrIE || regBooting
+  //  val jump = brIE || jalIE || jalrIE || regBooting
   val jump = brIE || jalIE || jalrIE
 
   val jumpPC = io.aluR
@@ -106,10 +110,10 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // Address of current instruction in IF stage
   val pcReg = RegEnable(pcWrite, bootAddrWire, (jump || issue) && !io.stall)
   io.if_pc := pcReg
-  printf(cf"pc: 0x$pcReg%x\n")
+  printf(cf"[FE] pc: 0x$pcReg%x\n")
   // printf(cf"pcw: 0x$pcWrite%x\n")
-  printf(cf"jump: $jump\n")
-  printf(cf"issue: $issue\n")
+  printf(cf"[FE] jump: $jump\n")
+  printf(cf"[FE] issue: $issue\n")
   // printf(cf"boot: $regBooting\n")
   // printf(cf"fq: ${fq.io.deq.valid}\n")
   // printf(cf"stall: ${io.stall}\n")
@@ -118,24 +122,37 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   // Fetch PC
   val issueLength = 4.U
+  val fqToken = RegInit(fetchqueueEntries.U((log2Floor(fetchqueueEntries)+1).W))
+  val fqTokenNotAvail = WireDefault(false.B) // I think when token is 0 queue is full
   val fetch = WireDefault(false.B)
-  fetch := fq.io.enq.ready && !regBooting
-  // FIXME: MUX
+//  fetch := fq.io.enq.ready && !regBooting && !fqTokenNotAvail
+//  fetch := !regBooting && !fqTokenNotAvail || io.exception || io.eret || jump
+  fetch := !fqTokenNotAvail || io.exception || io.eret || jump
+  when(io.epm.req && io.epm.ack) {
+    fqToken := fqToken
+  }.elsewhen(io.epm.req) {
+    fqToken := fqToken - 1.U
+  }.elsewhen(io.epm.ack) {
+    fqToken := fqToken + 1.U
+  }
+  fqTokenNotAvail := fqToken === 0.U
+
   val fetchPC = Reg(UInt(mxLen.W))
-  when (reset.asBool || regBooting) {
+  when(reset.asBool || regBooting) {
     fetchPC := bootAddrWire
     fq.flush := true.B
   }.elsewhen(io.exception || io.eret) {
-    fetchPC := io.evec
-    fq.flush := true.B
+      fetchPC := io.evec
+      fq.flush := true.B
   }.elsewhen (jump) {
     fetchPC := jumpPC
     fq.flush := true.B
-  }.elsewhen(issue) {
-    fetchPC := fetchPC + issueLength
-    fq.flush := false.B
-  }.otherwise {
+  }.elsewhen (fqTokenNotAvail) {
     fetchPC := fetchPC
+    fq.flush := false.B
+    // FIXME: Does this not needed?
+  }.otherwise {
+    fetchPC := fetchPC + issueLength
     fq.flush := false.B
   }
 
@@ -146,8 +163,11 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   io.epm.cmd := 0.U // int load
 
   // Issue
-  fq.io.deq.ready := issue // issue signal will block when stalled
-  io.instPacket.inst := Mux(issue, instIF, 0.U)
-  io.instPacket.xcpt := Mux(issue, xcptIF, 0.U.asTypeOf(new HeartXcpt))
+  fq.io.deq.ready := !io.stall // issue signal will block when stalled
+//  fq.io.deq.ready := true.B
+//  io.instPacket.inst := Mux(issue, instIF, 0.U)
+//  io.instPacket.xcpt := Mux(issue, xcptIF, 0.U.asTypeOf(new HeartXcpt))
+  io.instPacket.inst := instIF
+  io.instPacket.xcpt := xcptIF
   io.issue := issue
 }
