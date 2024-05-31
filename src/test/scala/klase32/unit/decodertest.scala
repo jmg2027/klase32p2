@@ -34,7 +34,7 @@ class DecoderTest extends KlasTest {
         "operandSelect.a" -> OperandType.default
         "operandSelect.b" -> OperandType.default
         "rdType" -> RdType.default
-        "w1Wb" -> W1WritebackIE.default
+        "w0Wb" -> W0WritebackIE.default
         "frontendCtrl" -> FrontendControlIE.default
         "lsuCtrl.lsSize" -> DataSize.default
         "lsuCtrl.isStore" -> false.B
@@ -47,6 +47,7 @@ class DecoderTest extends KlasTest {
         "flushICache" -> IcacheFlushIE.default
         "wfi" -> WFIIE.default
         "illegal" -> IllegalInstIE.default
+//        "illegal" -> false.B
       }
 
 //
@@ -129,19 +130,19 @@ class DecoderTest extends KlasTest {
         (Instructions.LUI, Map("aluCtrl" -> ALUControlIE.ADD, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.UImmediate)),
         (Instructions.AUIPC, Map("aluCtrl" -> ALUControlIE.ADD, "operandSelect.a" -> OperandType.PC, "operandSelect.b" -> OperandType.UImmediate)),
 
-        (Instructions.JAL, Map("operandSelect.a" -> OperandType.PC, "operandSelect.b" -> OperandType.JImmediate, "rdType" -> RdType.ConsecPC, "frontendCtrl" -> FrontendControlIE.JAL, "w1Wb" -> W1WritebackIE.EN)),
+        (Instructions.JAL, Map("operandSelect.a" -> OperandType.PC, "operandSelect.b" -> OperandType.JImmediate, "rdType" -> RdType.ConsecPC, "frontendCtrl" -> FrontendControlIE.JAL, "w0Wb" -> W0WritebackIE.EN)),
         (Instructions.JALR, Map("operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate, "rdType" -> RdType.ConsecPC, "frontendCtrl" -> FrontendControlIE.JALR)),
 
-        (Instructions.BEQ, Map("aluCtrl" -> ALUControlIE.EQ, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w1Wb" -> W1WritebackIE.EN)),
-        (Instructions.BNE, Map("aluCtrl" -> ALUControlIE.NE, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w1Wb" -> W1WritebackIE.EN)),
-        (Instructions.BLT, Map("aluCtrl" -> ALUControlIE.SLT, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w1Wb" -> W1WritebackIE.EN)),
-        (Instructions.BLTU, Map("aluCtrl" -> ALUControlIE.SLTU, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w1Wb" -> W1WritebackIE.EN)),
-        (Instructions.BGE, Map("aluCtrl" -> ALUControlIE.GE, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w1Wb" -> W1WritebackIE.EN)),
-        (Instructions.BGEU, Map("aluCtrl" -> ALUControlIE.GEU, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w1Wb" -> W1WritebackIE.EN)),
+        (Instructions.BEQ, Map("aluCtrl" -> ALUControlIE.EQ, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w0Wb" -> W0WritebackIE.EN)),
+        (Instructions.BNE, Map("aluCtrl" -> ALUControlIE.NE, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w0Wb" -> W0WritebackIE.EN)),
+        (Instructions.BLT, Map("aluCtrl" -> ALUControlIE.SLT, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w0Wb" -> W0WritebackIE.EN)),
+        (Instructions.BLTU, Map("aluCtrl" -> ALUControlIE.SLTU, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w0Wb" -> W0WritebackIE.EN)),
+        (Instructions.BGE, Map("aluCtrl" -> ALUControlIE.GE, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w0Wb" -> W0WritebackIE.EN)),
+        (Instructions.BGEU, Map("aluCtrl" -> ALUControlIE.GEU, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.Reg, "frontendCtrl" -> FrontendControlIE.BR, "w0Wb" -> W0WritebackIE.EN)),
 
-        (Instructions.SB, Map("lsuCtrl.lsSize" -> DataSize.Byte, "lsuCtrl.isStore" -> StoreControl.EN, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.SImmediate, "w1Wb" -> W1WritebackIE.EN)),
-        (Instructions.SH, Map("lsuCtrl.lsSize" -> DataSize.HalfWord, "lsuCtrl.isStore" -> StoreControl.EN, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.SImmediate, "w1Wb" -> W1WritebackIE.EN)),
-        (Instructions.SW, Map("lsuCtrl.lsSize" -> DataSize.Word, "lsuCtrl.isStore" -> StoreControl.EN, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.SImmediate, "w1Wb" -> W1WritebackIE.EN)),
+        (Instructions.SB, Map("lsuCtrl.lsSize" -> DataSize.Byte, "lsuCtrl.isStore" -> StoreControl.EN, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.SImmediate)),
+        (Instructions.SH, Map("lsuCtrl.lsSize" -> DataSize.HalfWord, "lsuCtrl.isStore" -> StoreControl.EN, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.SImmediate)),
+        (Instructions.SW, Map("lsuCtrl.lsSize" -> DataSize.Word, "lsuCtrl.isStore" -> StoreControl.EN, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.SImmediate)),
 
         (Instructions.LB, Map("lsuCtrl.lsSize" -> DataSize.Byte, "lsuCtrl.isLoad" -> LoadControl.EN, "lsuCtrl.isSigned" -> SignedControl.signed, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate)),
         (Instructions.LH, Map("lsuCtrl.lsSize" -> DataSize.HalfWord, "lsuCtrl.isLoad" -> LoadControl.EN, "lsuCtrl.isSigned" -> SignedControl.signed, "operandSelect.a" -> OperandType.Reg, "operandSelect.b" -> OperandType.IImmediate)),
@@ -159,9 +160,9 @@ class DecoderTest extends KlasTest {
         (Instructions.ECALL, Map("ecall" -> EcallIE.EN)),
         (Instructions.EBREAK, Map("ebreak" -> EbreakIE.EN)),
 
-        (Instructions.MRET, Map("frontendCtrl" -> FrontendControlIE.MRET, "mret" -> MRetIE.EN, "w1Wb" -> W1WritebackIE.EN)),
+        (Instructions.MRET, Map("frontendCtrl" -> FrontendControlIE.MRET, "mret" -> MRetIE.EN, "w0Wb" -> W0WritebackIE.EN)),
 
-        (Instructions.FENCE, Map("fence" -> FenceEnableIE.EN, "w1Wb" -> W1WritebackIE.EN)),
+        (Instructions.FENCE, Map("fence" -> FenceEnableIE.EN, "w0Wb" -> W0WritebackIE.EN)),
         (Instructions.FENCE_I, Map("flushICache" -> IcacheFlushIE.EN)),
         (Instructions.WFI, Map("wfi" -> WFIIE.EN))
       )
@@ -225,7 +226,7 @@ class DecoderTest extends KlasTest {
         "rd" -> 0.U,
         "imm.j" -> 0x1000.S,
         "frontendCtrl" -> FrontendControlIE.JAL,
-        "w1Wb" -> W1WritebackIE.EN,
+        "w0Wb" -> W0WritebackIE.EN,
         "operandSelect.a" -> OperandType.PC,
         "operandSelect.b" -> OperandType.JImmediate
       )
@@ -235,6 +236,7 @@ class DecoderTest extends KlasTest {
       val illegalInst = BitPat("b1")
       val illegalExpectedFields = Map(
         "illegal" -> IllegalInstIE.illegal
+//        "illegal" -> true.B
       )
       testInstruction(illegalInst, illegalExpectedFields)
     }
