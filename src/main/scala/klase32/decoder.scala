@@ -35,9 +35,9 @@ class Decoded(implicit p: Parameters) extends CoreBundle {
   val csrCtrl = CSRControl()
 
   val rdType = RdType()
-//  val useRD = Bool()
-  val w1Wb = W1WritebackIE()
-//  val w2Wb = RegXControlME()
+  //  val useRD = Bool()
+  val w0Wb = W0WritebackIE()
+  //  val w2Wb = RegXControlME()
 
   val frontendCtrl = FrontendControlIE()
 
@@ -80,7 +80,7 @@ class Decoder(implicit p: Parameters) extends CoreModule {
     CSRControlField -> d.csrCtrl,
 
     RdField -> d.rdType,
-    W1WritebackField -> d.w1Wb,
+    W0WritebackField -> d.w0Wb,
 
     CtrlControlIEField -> d.frontendCtrl,
 
@@ -106,7 +106,8 @@ class Decoder(implicit p: Parameters) extends CoreModule {
       // RV32CDecode.table ++
       RV32MDecode.table
 
-  val decodeTable = new DecodeTable(instTable, decodeMapping.unzip._1)
+//  val decodeTable = new DecodeTable(instTable, decodeMapping.unzip._1)
+  val decodeTable = new DecodeTableWithDefault(instTable, decodeMapping.unzip._1)
   val decodedInst = decodeTable.decode(io.inst)
 
   // Set Output
