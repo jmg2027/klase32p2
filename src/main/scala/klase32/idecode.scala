@@ -3,13 +3,14 @@ package klase32
 import chisel3._
 import chisel3.util._
 
-import chisel3.util.experimental.decode.{DecodeField, DecodePattern, BoolDecodeField}
+import chisel3.util.experimental.decode.
+{DecodeField, DecodePattern, BoolDecodeField, DecodeTable, TruthTable}
 import snitch.enums._
 
 
 /**
-  * Definitions of Decoder Base classes
-  */
+ * Definitions of Decoder Base classes
+ */
 
 class InstProperty(val v: Data) {
   var chain: List[InstProperty] = List(this)
@@ -34,8 +35,21 @@ case class InstPattern(val pat: BitPat, val prop: InstProperty) extends DecodePa
   def bitPat: BitPat = pat
 }
 
-abstract class InstEnumField(e: SnitchEnum) extends DecodeField[InstPattern, EnumType] {
-  // override def default = BitPat(e.default.litOption.get.U(e.getWidth.W)) // Every default value is 0
+trait DecodeFieldWithDefault[T <: DecodePattern, D <: Data] extends DecodeField[T, D] {
+  def default: BitPat
+}
+
+trait BoolDecodeFieldWithDefault[T <: DecodePattern] extends DecodeFieldWithDefault[T, Bool] {
+  def chiselType: Bool = Bool()
+
+  def y: BitPat = BitPat.Y(1)
+
+  def n: BitPat = BitPat.N(1)
+}
+
+abstract class InstEnumField(e: SnitchEnum) extends DecodeFieldWithDefault[InstPattern, EnumType] {
+//  override def default = BitPat(e.default.litOption.get.U(e.getWidth.W))
+   def default = BitPat(e.default.litOption.get.U(e.getWidth.W))
   def typeChecker: (InstProperty => Boolean)
 
   override def chiselType: EnumType = e()
@@ -49,8 +63,8 @@ abstract class InstEnumField(e: SnitchEnum) extends DecodeField[InstPattern, Enu
   }
 }
 
-abstract class InstBoolField extends BoolDecodeField[InstPattern] {
-  // override def default = BitPat(_default) // Every default value is 0
+abstract class InstBoolField(_default: Bool = false.B) extends BoolDecodeFieldWithDefault[InstPattern] {
+   def default = BitPat(_default) // Every default value is 0
   def typeChecker: (InstProperty => Boolean)
 
   override def genTable(p: InstPattern) = {
@@ -63,15 +77,33 @@ abstract class InstBoolField extends BoolDecodeField[InstPattern] {
   }
 }
 
+// Custom extension for decode
+class DecodeTableWithDefault[I <: DecodePattern, D <: Data, T <: DecodeFieldWithDefault[I, _]](patterns: Seq[I], fields: Seq[T])
+  extends DecodeTable[I](patterns, fields) {
+  private val _table = patterns.map { op =>
+    op.bitPat -> fields.reverse.map(field => field.genTable(op)).reduce(_ ## _)
+  }
+  private val _default = fields.reverse.map(field => field.default).reduce(_ ## _)
+
+  override val table: TruthTable = TruthTable(_table, _default)
+}
+
 /**
-  * Definitions of Decoder Properties and Fields
-  */
+ * Definitions of Decoder Properties and Fields
+ */
 
 case class IllegalProperty(op: IllegalInstIE.Type) extends InstProperty(op)
 object IllegalField extends InstEnumField(IllegalInstIE) {
   override def name = "illegal"
+  override def default = BitPat(IllegalInstIE.illegal.litOption.get.U(IllegalInstIE.getWidth.W))
   override def typeChecker = _.isInstanceOf[IllegalProperty]
 }
+//case class IllegalProperty(f: Bool) extends InstProperty(f)
+//object IllegalField extends InstBoolField(false.B) {
+//  override def name = "illegal"
+//  override def default = y
+//  override def typeChecker = _.isInstanceOf[IllegalProperty]
+//}
 
 case class OpAProperty(op: OperandType.Type) extends InstProperty(op)
 object OpAField extends InstEnumField(OperandType) {
@@ -103,16 +135,22 @@ object RdField extends InstEnumField(RdType) {
   override def typeChecker = _.isInstanceOf[RdProperty]
 }
 
-case class W1WritebackProperty(op: W1WritebackIE.Type) extends InstProperty(op)
-object W1WritebackField extends InstEnumField(W1WritebackIE) {
+case class W0WritebackProperty(op: W0WritebackIE.Type) extends InstProperty(op)
+object W0WritebackField extends InstEnumField(W0WritebackIE) {
   override def name = "w1 writeback"
-  override def typeChecker = _.isInstanceOf[W1WritebackProperty]
+  override def typeChecker = _.isInstanceOf[W0WritebackProperty]
 }
 
 case class UseRdProperty(op: Bool) extends InstProperty(op)
 object UseRdField extends InstBoolField {
   override def name = "use rd"
   override def typeChecker = _.isInstanceOf[UseRdProperty]
+}
+
+case class RS2NotALUBProperty(value: RS2NotALUBIE.Type)(op: Bool) extends InstProperty(op)
+object RS2NotALUBProperty extends InstBoolField {
+  override def name = "use rd"
+  override def typeChecker = _.isInstanceOf[RS2NotALUBProperty]
 }
 
 case class NextPcProperty(op: PcType.Type) extends InstProperty(op)
@@ -224,8 +262,8 @@ object AmoField extends InstEnumField(AMOType) {
 }
 
 /**
-  * Definitions of Composite properties
-  */
+ * Definitions of Composite properties
+ */
 
 case class OpCompProperty(a: OperandType.Type, b: OperandType.Type) extends InstProperty(
   OpAProperty(a) ++
@@ -235,32 +273,33 @@ case class OpCompProperty(a: OperandType.Type, b: OperandType.Type) extends Inst
 case class AluCompProperty(alu: ALUControlIE.Type, a: OperandType.Type, b: OperandType.Type) extends InstProperty(
   AluProperty(alu) ++
     OpCompProperty(a, b) ++
-    W1WritebackProperty(W1WritebackIE.EN)
+    W0WritebackProperty(W0WritebackIE.EN)
 )
 
 case class BranchCompProperty(alu: ALUControlIE.Type) extends InstProperty(
   AluCompProperty(alu, OperandType.Reg, OperandType.Reg) ++
     CtrlControlIEProperty(FrontendControlIE.BR)
+//    RS2NotALUBProperty(RS2NotALUBIE.EN)
 )
 
 case class StoreCompProperty(lsSize: DataSize.Type) extends InstProperty(
   OpCompProperty(OperandType.Reg, OperandType.SImmediate) ++
+    AluProperty(ALUControlIE.ADD) ++
     StoreProperty(StoreControl.EN) ++
     LsSizeProperty(lsSize)
-    // W1WritebackProperty(W1WritebackIE.EN)
 )
 
 case class LoadCompProperty(lsSize: DataSize.Type, isSigned: SignedControl.Type = SignedControl.signed) extends InstProperty(
   OpCompProperty(OperandType.Reg, OperandType.IImmediate) ++
+    AluProperty(ALUControlIE.ADD) ++
     LoadProperty(LoadControl.EN) ++
     SignedProperty(isSigned) ++
     LsSizeProperty(lsSize) ++
-    W1WritebackProperty(W1WritebackIE.EN) ++
     UseRdProperty(true.B)
 )
 
 case class RetCompProperty(frontendControl: FrontendControlIE.Type) extends InstProperty(
-  W1WritebackProperty(W1WritebackIE.EN) ++
+  W0WritebackProperty(W0WritebackIE.EN) ++
     CtrlControlIEProperty(frontendControl)
 )
 
@@ -299,7 +338,7 @@ object RV32IDecode extends InstDecode {
       OpCompProperty(OperandType.PC, OperandType.JImmediate) ++
         RdProperty(RdType.ConsecPC) ++
         CtrlControlIEProperty(FrontendControlIE.JAL) ++
-        W1WritebackProperty(W1WritebackIE.EN)
+        W0WritebackProperty(W0WritebackIE.EN)
     ),
 
     new InstPattern(JALR,
@@ -365,7 +404,7 @@ object RV32IDecode extends InstDecode {
       ++ MRetProperty(MRetIE.EN)),
 
     new InstPattern(FENCE,
-      W1WritebackProperty(W1WritebackIE.EN) ++
+      W0WritebackProperty(W0WritebackIE.EN) ++
         FenceProperty(FenceEnableIE.EN)
     ),
     new InstPattern(FENCE_I, FlushICacheProperty(IcacheFlushIE.EN)),
@@ -378,7 +417,7 @@ object RV32IDecode extends InstDecode {
 case class AmoCompProperty(amo: AMOType.Type) extends InstProperty(
   // AluCompProperty(ALUControlIE.BypassA, OperandType.Reg, OperandType.Reg) ++
   OpCompProperty(OperandType.Reg, OperandType.Reg) ++
-    W1WritebackProperty(W1WritebackIE.EN) ++
+//    W1WritebackProperty(W1WritebackIE.EN) ++
     UseRdProperty(true.B) ++
     LoadProperty(LoadControl.EN) ++
     SignedProperty(SignedControl.signed) ++
@@ -409,7 +448,7 @@ object RV32ADecode extends InstDecode {
 
 case class MulDivCompProperty() extends InstProperty(
   OpCompProperty(OperandType.Reg, OperandType.Reg) ++
-    W1WritebackProperty(W1WritebackIE.EN) ++
+    W0WritebackProperty(W0WritebackIE.EN) ++
     UseRdProperty(true.B) ++
     AccValidProperty(true.B) ++
     AccUseRdProperty(true.B) ++
