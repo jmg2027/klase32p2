@@ -24,8 +24,8 @@ import snitch.test.TestMem
 case class TestInterrupt(var e: Boolean, var t: Boolean, var s: Boolean)
 
 abstract class TestCluster(
-                            epmLatency: Int = 1,
-                            edmLatency: Int = 1,
+                            epmLatency: Int = 2,
+                            edmLatency: Int = 2,
                           )(implicit p: Parameters) extends Module {
   val k = p(KLASE32ParamKey)
 
@@ -74,9 +74,9 @@ abstract class TestCluster(
   def isDone() = mem.load(0x70000000L) != BigInt(0)
 
   def run() = {
-    // while (!isDone()) tick()
+     while (!isDone()) tick()
     // println("Done!")
-    tick(20)
+//    tick(40)
   }
 }
 
@@ -91,16 +91,16 @@ class ClusterTestMem(
                             )
 
   case class TestStoreRequest(
-                              st_req: Boolean,
-                              st_paddr: BigInt,
-                              st_wdata: BigInt,
-                              st_mask: BigInt,
-                              st_mmio: Boolean
-                            )
+                               st_req: Boolean,
+                               st_paddr: BigInt,
+                               st_wdata: BigInt,
+                               st_mask: BigInt,
+                               st_mmio: Boolean
+                             )
   case class TestDataRequest(
-                            cmd: BigInt,
-                            load: TestLoadRequest,
-                            store: TestStoreRequest
+                              cmd: BigInt,
+                              load: TestLoadRequest,
+                              store: TestStoreRequest
                             )
 
   val dataReqQueue = mut.Queue[TestDataRequest]()
@@ -128,6 +128,22 @@ class ClusterTestMem(
     ))
   }
 
+  case class TestInstRequest(
+                            req: Boolean,
+                            addr: BigInt,
+                            kill: Boolean,
+                            flush: Boolean
+                            )
+
+  val instReqInitialValue = TestInstRequest(
+    req = false, addr = 0, kill = false, flush = false
+  )
+  val instReqQueue = mut.Queue[TestInstRequest]()
+
+  for (i <- 0 until instLatency) {
+    instReqQueue.enqueue(instReqInitialValue)
+  }
+
   def tick() = {
     instTick()
     dataTick()
@@ -136,35 +152,72 @@ class ClusterTestMem(
   // 0: New request, reset to epmLatency
   // 1: Latency ended
   var instCnt = 0
+//  def instTick() = {
+//    val req = instReqQueue.front
+//    def instResp(data: BigInt, ack: Boolean, xcpt: Option[HeartXcpt]) = {
+//      dut.epm.data.poke(data)
+//      dut.epm.ack.poke(ack)
+//      dut.epm.xcpt.poke(dut.noXcpt)
+//    }
+//    def noResp() = instResp(0, false, None)
+//
+//    val addrValid = dut.epm.req.peekBoolean()
+//    if (addrValid) {
+//      if (instCnt == 0) {
+//        instCnt = instLatency
+//      } else {
+//        instCnt -= 1
+//      }
+//
+//      if (instCnt == 0) {
+//        val addr = dut.epm.addr.peekInt().toLong
+//        val data = load(addr)
+//        //        val xcpt = loadXcpt(addr)
+//        val xcpt = None
+//        instResp(data, true, xcpt)
+//        println(f"[Mem] Inst Request addr($addr%X) data($data%X) xcpt($xcpt)")
+//      } else {
+//        noResp()
+//      }
+//    } else {
+//      noResp()
+//    }
+//  }
+
   def instTick() = {
-    def instResp(data: BigInt, ack: Boolean, xcpt: Option[HeartXcpt]) = {
-      dut.epm.data.poke(data)
-      dut.epm.ack.poke(ack)
+    val req = instReqQueue.front
+    if (!(req.req)) {
+      dut.epm.ack.poke(false)
+      dut.epm.data.poke(0)
       dut.epm.xcpt.poke(dut.noXcpt)
-    }
-    def noResp() = instResp(0, false, None)
 
-    val addrValid = dut.epm.req.peekBoolean()
-    if (addrValid) {
-      if (instCnt == 0) {
-        instCnt = instLatency
-      } else {
-        instCnt -= 1
-      }
-
-      if (instCnt == 0) {
-        val addr = dut.epm.addr.peekInt().toLong
-        val data = load(addr)
-//        val xcpt = loadXcpt(addr)
-        val xcpt = None
-        instResp(data, true, xcpt)
-        println(f"[Mem] Inst Request addr($addr%X) data($data%X) xcpt($xcpt)")
-      } else {
-        noResp()
-      }
+      instReqQueue.dequeue()
     } else {
-      noResp()
+      val data = load(req.addr)
+      println(f"[Inst] Load To addr(${req.addr}%X) data($data%X)")
+      dut.epm.data.poke(data)
+      dut.epm.ack.poke(true)
+      dut.epm.xcpt.poke(dut.noXcpt)
+
+      instReqQueue.dequeue()
     }
+
+
+
+    if (instReqQueue.size == instLatency - 1) {
+      if (dut.epm.req.peekBoolean()) {
+        instReqQueue.enqueue(TestInstRequest(
+          req = dut.epm.req.peekBoolean(),
+          addr = dut.epm.addr.peekInt(),
+          kill = false,
+          flush = dut.epm.flush.peekBoolean()
+        ))
+      }
+      else {
+        instReqQueue.enqueue(instReqInitialValue)
+      }
+    }
+    println(instReqQueue)
   }
 
   def dataTick() = {
@@ -184,12 +237,10 @@ class ClusterTestMem(
         dut.edm.ld_rdata.poke(ld_data)
         dut.edm.ld_ack.poke(true)
         dut.edm.xcpt.poke(dut.noXcpt)
+
+        dataReqQueue.dequeue()
       }
       else {
-//        val st_data = {
-//          storeStrb(req.st_paddr, req.st_wdata, req.st_mask)
-//          BigInt(0)
-//        }
         storeStrb(req.store.st_paddr, req.store.st_wdata, req.store.st_mask)
         dut.edm.st_ack.poke(true)
         dut.edm.xcpt.poke(dut.noXcpt)
@@ -228,6 +279,7 @@ class ClusterTestMem(
         dataReqQueue.enqueue(dataReqInitialValue)
       }
     }
+    println(dataReqQueue)
   }
 
   def storeStrb(addr: BigInt, data: BigInt, strb: BigInt) = {
