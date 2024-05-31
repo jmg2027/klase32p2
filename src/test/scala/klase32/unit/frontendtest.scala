@@ -57,7 +57,7 @@ class FrontendTest extends KlasTest {
       initializeDut()
 
       // Set initial fetchPC to boot address
-      val bootAddr = 0x1000
+      val bootAddr = 0x80000000L
       dut.io.epm.bootAddr.poke(bootAddr)
 
       // Cycle 1: Reset active
@@ -83,7 +83,7 @@ class FrontendTest extends KlasTest {
       dut.io.exception.poke(true)
       dut.io.evec.poke(0x2000) // Exception vector address
       dut.clock.step(1)
-//      dut.io.if_pc.expect(0x2000)
+      //      dut.io.if_pc.expect(0x2000)
       dut.io.epm.req.expect(true) // EPM request should be true after exception
       dut.io.epm.addr.expect(0x2000)
       dut.io.exception.poke(false)
@@ -112,12 +112,13 @@ class FrontendTest extends KlasTest {
       dut.io.if_pc.expect(0x5000)
       dut.io.epm.req.expect(true) // EPM request should be true after JALR
       dut.io.epm.addr.expect(0x5000)
+      dut.clock.step(1)
 
       // Cycle 7: Normal fetch with stall
       dut.io.stall.poke(true)
-      dut.clock.step(1)
       dut.io.issue.expect(false) // EPM request should be false during stall
       dut.io.stall.poke(false)
+      dut.clock.step(1)
 
       // Cycle 8: Normal fetch with issue
       dut.io.epm.data.poke(0x12345678)
@@ -125,8 +126,9 @@ class FrontendTest extends KlasTest {
       dut.clock.step(1)
       dut.io.instPacket.inst.expect(0x12345678)
       dut.io.epm.req.expect(true)
-//      dut.io.epm.addr.expect(0x5000 + 4) // Fetch address should be updated correctly
+      //      dut.io.epm.addr.expect(0x5000 + 4) // Fetch address should be updated correctly
 
+      dut.clock.step(1)
       // Cycle 9: Handling eret
       dut.io.eret.poke(true)
       dut.io.evec.poke(0x6000)
