@@ -51,14 +51,14 @@ object FrontendControlIE extends ControlDefaultEnum {
   val JALR = Value
 }
 
-object W1WritebackIE extends ControlDefaultEnableEnum
+object W0WritebackIE extends ControlDefaultEnableEnum
 // Write to GPR with no TCM latency, not from lsu
 
 object IllegalInstIE extends ControlEnum {
   val normal = Value
   val illegal = Value
 
-  override val default = this.illegal
+  override val default = this.normal
 }
 
 object WFIIE extends ControlDefaultEnableEnum
@@ -89,6 +89,8 @@ object EcallIE extends ControlDefaultEnableEnum
 object EbreakIE extends ControlDefaultEnableEnum
 
 object MRetIE extends ControlDefaultEnableEnum
+
+object RS2NotALUBIE extends ControlDefaultEnableEnum
 
 object MpyMDMuxIE extends ControlDefaultEnum {
   // default: MULHU(unsigned a, unsigned b)
