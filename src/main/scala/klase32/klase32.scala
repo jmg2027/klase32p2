@@ -26,8 +26,6 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   val io = IO(new KLASE32IO)
 
-  // FIXME: WFI
-  io.powerdown := DontCare
 
   // Module definition
   val alu = Module(new ALU)
@@ -45,11 +43,12 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   // control signal
   val ctrlSig = dec.io.decSig
-  printf(cf"ctrlSig: ${ctrlSig}\n")
+
+
 
   // Stall
   val stallSig = WireInit(new Stall, DontCare)
-  // stallSig.ie.issue := !frontend.io.issue
+  stallSig.ie.issue := !frontend.io.issue
   stallSig.ie.store := lsu.io.storeFull
   stallSig.ie.csr := csr.io.csrWrite
   stallSig.me.load := lsu.io.loadFull
@@ -58,8 +57,18 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   stallSig.me.fence := ctrlSig.fence.asUInt.orR && (lsu.io.loadFull || lsu.io.storeFull)
   val stallIE = stallSig.ie.orR
   val stallME = stallSig.me.orR
-  val stall = stallIE && stallME
-  // printf(cf"stallSig.ie.issue: ${stallSig.ie.issue}\n")
+  val stall = stallIE || stallME
+
+  // Pipeline
+//  val ie_inst = RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall && frontend.io.issue)
+  val ie_inst = RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall)
+  val ie_pc = RegEnable(frontend.io.if_pc, !stall)
+
+  printf(cf"===============================New Cycle===============================\n")
+  printf(cf"ie_inst: ${ie_inst}%x\n")
+  printf(cf"ie_pc: ${ie_pc}%x\n")
+  printf(cf"ctrlSig: ${ctrlSig}\n")
+  printf(cf"stallSig.ie.issue: ${stallSig.ie.issue}\n")
   printf(cf"stallSig.ie.store: ${stallSig.ie.store}\n")
   printf(cf"stallSig.ie.csr: ${stallSig.ie.csr}\n")
   printf(cf"stallSig.me.load: ${stallSig.me.load}\n")
@@ -67,12 +76,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   printf(cf"stallSig.me.hzd: ${stallSig.me.hzd}\n")
   printf(cf"stallSig.me.fence: ${stallSig.me.fence}\n")
 
-  // Pipeline
-  val ie_inst = RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall && frontend.io.issue)
-  printf(cf"ie_inst: ${ie_inst}%x\n")
-  val ie_pc = RegEnable(frontend.io.if_pc, !stall)
-
-  val me_inst = RegEnable(ie_inst, bitPatToUInt(NOP), !stallME)
+  //  val me_inst = RegEnable(ie_inst, bitPatToUInt(NOP), !stallME)
   val me_pc = RegEnable(ie_pc, !stallME)
   val me_lsu = RegEnable(ctrlSig.lsuCtrl, !stallME)
   val me_isLoad = RegEnable(ctrlSig.lsuCtrl.isLoad, !stallME)
@@ -92,8 +96,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     (lsu.io.stXcpt.pf, Causes.store_page_fault.U),
     (lsu.io.stXcpt.gf, Causes.store_guest_page_fault.U),
     (lsu.io.stXcpt.ae, Causes.store_access.U),
-    // FIXME: Illegal instruction not detected
-    // (ctrlSig.illegal === IllegalInstIE.illegal, Causes.illegal_instruction.U),
+    (ctrlSig.illegal === IllegalInstIE.illegal, Causes.illegal_instruction.U),
     (ctrlSig.ecall === EcallIE.EN, Causes.machine_ecall.U),
     (ctrlSig.ebreak === EbreakIE.EN, Causes.breakpoint.U),
   ))
@@ -102,6 +105,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   val ieXcptReg = RegEnable(ieXcpt, !stallME)
   val ieCauseReg = RegEnable(ieCause, !stallME)
 
+  // FIXME: Until cache
   val (meXcpt, meCause): (Bool, UInt)= checkExceptions(List(
     (ieXcptReg, ieCauseReg),
     (lsu.io.ldXcpt.ma, Causes.misaligned_load.U),
@@ -139,20 +143,24 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // Register file
   reg.io.rp(0).addr := ctrlSig.rs1
   reg.io.rp(1).addr := ctrlSig.rs2
-  val rs1 = Mux(hzd.io.bypassRS1RD, reg.io.rp(0).data, lsu.io.rddata)
+  // FIXME: Why this prints 0??
+  val rs1 = Mux(!hzd.io.bypassRS1RD, reg.io.rp(0).data, lsu.io.rddata)
+//  val rs1 = reg.io.rp(0).data
   printf(cf"reg.io.rp(0).addr: ${reg.io.rp(0).addr}\n")
   printf(cf"reg.io.rp(0).data: ${reg.io.rp(0).data}%x\n")
   printf(cf"reg.io.rp(1).addr: ${reg.io.rp(1).addr}\n")
   printf(cf"reg.io.rp(1).data: ${reg.io.rp(1).data}%x\n")
-  val rs2 = Mux(hzd.io.bypassRS2RD, reg.io.rp(1).data, lsu.io.rddata)
+  val rs2 = Mux(!hzd.io.bypassRS2RD, reg.io.rp(1).data, lsu.io.rddata)
+//  val rs2 = reg.io.rp(1).data
 
   reg.io.wp(0).bits.addr := ctrlSig.rd
   reg.io.wp(1).bits.addr := me_rdaddr
-  // reg.io.wp(0).valid := ctrlSig.w1Wb.asUInt.orR && !stall
-  reg.io.wp(0).valid := ctrlSig.w1Wb.asUInt.orR
+   reg.io.wp(0).valid := ctrlSig.w0Wb.asUInt.orR && !stall
+//  reg.io.wp(0).valid := ctrlSig.w0Wb.asUInt.orR
   // FIXME: Decoupling
-  // reg.io.wp(1).valid := me_isLoad.asUInt.orR && !stallME
-  reg.io.wp(1).valid := me_isLoad.asUInt.orR
+//   reg.io.wp(1).valid := me_isLoad.asUInt.orR && !stallME
+  reg.io.wp(1).valid := me_isLoad.asUInt.orR && !stallME
+//  reg.io.wp(1).valid := me_isLoad.asUInt.orR
   printf(cf"reg.io.wp(0).valid: ${reg.io.wp(0).valid}\n")
   printf(cf"alu.io.R: ${alu.io.R}%x\n")
 
@@ -173,6 +181,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     OperandType.PC -> ie_pc,
     OperandType.CSRImmediate -> ctrlSig.rs1 // rs1 field of instruction is imm field
   ).map { case (k, v) => (k === ctrlSig.operandSelect.a, v) })
+
   alu.io.B := Mux1H(Seq(
     OperandType.None -> 0.U,
     OperandType.Reg -> rs2,
@@ -205,19 +214,24 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   csr.io.epc := me_pc
   csr.io.loadAddr := me_aluR
 
+  io.powerdown := csr.io.wfiOut
+
   // interrupt
   csr.io.interrupt := io.interrupt
 
 
   // Hazard
-  hzd.io.rs1Valid := ctrlSig.operandSelect.a === OperandType.Reg
-  hzd.io.rs2Valid := ctrlSig.operandSelect.b === OperandType.Reg
+  // FIXME: Why does this not work?
+  hzd.io.rs1Valid := ((OperandType.Reg) === (ctrlSig.operandSelect.a))
+  // RS2: ALU.B || Store || Branch
+  hzd.io.rs2Valid := ((ctrlSig.operandSelect.b) === (OperandType.Reg)) ||
+      ((ctrlSig.frontendCtrl) === (FrontendControlIE.BR)) ||
+      ((ctrlSig.lsuCtrl.isStore) === (StoreControl.EN))
   hzd.io.loadValid := me_isLoad === LoadControl.EN
 
   hzd.io.rs1Addr := ctrlSig.rs1
   hzd.io.rs2Addr := ctrlSig.rs2
   hzd.io.rdAddr := me_rdaddr
-
 
   // LSU
   lsu.io.lsuctrlIE <> ctrlSig.lsuCtrl
@@ -228,6 +242,8 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   lsu.io.wrdata := rs2
   printf(cf"lsu.io.addr: ${lsu.io.addr}%x\n")
   printf(cf"lsu.io.wrdata: ${lsu.io.wrdata}%x\n")
+  lsu.io.stall := stall
+  lsu.io.stallME := stallME
 
   def checkExceptions(x: Seq[(Bool, UInt)]) =
     (x.map(_._1).reduce(_||_), PriorityMux(x))
