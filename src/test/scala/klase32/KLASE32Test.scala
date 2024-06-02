@@ -67,119 +67,99 @@ class SingleCoreMulDivClusterSpec extends SnitchTester {
     }
   }
 
-  "Basic" - {
-    "test 0" in {
+
+  //  "Store" - {
+  //    "test 0" in {
+  //      val text =
+  //        """
+  //        lui  x1, 0x12345
+  //        addi x1, x1, 0x678
+  //        lui  x31, 0x40000
+  //        sw   x1, 0(x31)
+  //        sh   x1, 4(x31)
+  //        sb   x1, 8(x31)
+  //        addi x31, x31, 0x40
+  //        sh   x1, 6(x31)
+  //        sb   x1, 7(x31)
+  //        """.stripMargin
+
+  //      test(new Self.Cluster) { dut =>
+  //        dut.mem.setupText(0x80000000L, text + textEnd)
+  //        dut.run()
+  //        testMem(dut)(Seq(
+  //          0x0L -> 0x12345678L,
+  //          0x4L -> 0x5678L,
+  //          0x8L -> 0x78L,
+  //          0x44L -> 0x78780000L,
+  //        ))
+  //      }
+  //    }
+  //  }
+
+  // "Load" - {
+  //   "test 0" in {
+  //     val text =
+  //       """
+  //       lui x31, 0x50000
+  //       lui x30, 0x40000
+  //       lw  x1, 0(x31)
+  //       lh  x2, 2(x31)
+  //       lb  x3, 3(x31)
+  //       sb  x3, 8(x30)
+  //       sh  x2, 4(x30)
+  //       sw  x1, 0(x30)
+  //       """.stripMargin
+  //     val data =
+  //       """
+  //       12345678
+  //       """.stripMargin
+  //    test(new Self.Cluster).withAnnotations(useVerilator) { dut =>
+  //     // test(new Self.Cluster) { dut =>
+  //       dut.mem.setupText(0x80000000L, text + textEnd)
+  //       dut.mem.setupData(0x50000000L, data)
+  //       dut.run()
+  //       testMem(dut)(Seq(
+  //         0x0L -> 0x12345678L,
+  //         0x4L -> 0x1234L,
+  //         0x8L -> 0x12L,
+  //       ))
+  //     }
+  //   }
+  // }
+
+    "test sign ext" in {
       val text =
         """
-        lui  x1, 0x12345
-        addi x1, x1, 0x678
-        lui  x31, 0x40000
+        lui x31, 0x50000
+        lh  x1, 0(x31)
+        lb  x2, 0(x31)
+        lhu x3, 0(x31)
+        lbu x4, 0(x31)
+        lui x31, 0x40000
+        sw  x1, 0(x31)
+        sw  x2, 4(x31)
+        sw  x3, 8(x31)
+        sw  x4, 12(x31)
         """.stripMargin
-
-      test(new Self.Cluster) { dut =>
+      val data =
+        """
+        12348786
+        """.stripMargin
+     test(new Self.Cluster).withAnnotations(useVerilator) { dut =>
+      // test(new Self.Cluster) { dut =>
         dut.mem.setupText(0x80000000L, text + textEnd)
+        dut.mem.setupData(0x50000000L, data)
         dut.run()
         testMem(dut)(Seq(
-          0x0L -> 0x12345678L,
-          0x4L -> 0x5678L,
-          0x8L -> 0x78L,
-          0x44L -> 0x78780000L,
+          0L  -> 0xFFFF8786L,
+          4L  -> 0xFFFFFF86L,
+          8L  -> 0x00008786L,
+          12L -> 0x00000086L,
         ))
       }
     }
-  }
+  
 
-
-//   "Store" - {
-//     "test 0" in {
-//       val text =
-//         """
-//         lui  x1, 0x12345
-//         addi x1, x1, 0x678
-//         lui  x31, 0x40000
-//         sw   x1, 0(x31)
-//         sh   x1, 4(x31)
-//         sb   x1, 8(x31)
-//         addi x31, x31, 0x40
-//         sh   x1, 6(x31)
-//         sb   x1, 7(x31)
-//         """.stripMargin
-
-//       test(new Self.Cluster) { dut =>
-//         dut.mem.setupText(0x80000000L, text + textEnd)
-//         dut.run()
-//         testMem(dut)(Seq(
-//           0x0L -> 0x12345678L,
-//           0x4L -> 0x5678L,
-//           0x8L -> 0x78L,
-//           0x44L -> 0x78780000L,
-//         ))
-//       }
-//     }
-//   }
-
-//   "Load" - {
-//     "test 0" in {
-//       val text =
-//         """
-//         lui x31, 0x50000
-//         lui x30, 0x40000
-//         lw  x1, 0(x31)
-//         lh  x2, 2(x31)
-//         lb  x3, 3(x31)
-//         sb  x3, 8(x30)
-//         sh  x2, 4(x30)
-//         sw  x1, 0(x30)
-//         """.stripMargin
-//       val data =
-//         """
-//         12345678
-//         """.stripMargin
-// //      test(new Self.Cluster).withAnnotations(useVerilator) { dut =>
-//       test(new Self.Cluster) { dut =>
-//         dut.mem.setupText(0x80000000L, text + textEnd)
-//         dut.mem.setupData(0x50000000L, data)
-//         dut.run()
-//         testMem(dut)(Seq(
-//           0x0L -> 0x12345678L,
-//           0x4L -> 0x1234L,
-//           0x8L -> 0x12L,
-//         ))
-//       }
-//     }
-
-//     "test sign ext" in {
-//       val text =
-//         """
-//         lui x31, 0x50000
-//         lh  x1, 0(x31)
-//         lb  x2, 0(x31)
-//         lhu x3, 0(x31)
-//         lbu x4, 0(x31)
-//         lui x31, 0x40000
-//         sw  x1, 0(x31)
-//         sw  x2, 4(x31)
-//         sw  x3, 8(x31)
-//         sw  x4, 12(x31)
-//         """.stripMargin
-//       val data =
-//         """
-//         12348786
-//         """.stripMargin
-// //      test(new Self.Cluster).withAnnotations(useVerilator) { dut =>
-//       test(new Self.Cluster) { dut =>
-//         dut.mem.setupText(0x80000000L, text + textEnd)
-//         dut.mem.setupData(0x50000000L, data)
-//         dut.run()
-//         testMem(dut)(Seq(
-//           0L  -> 0xFFFF8786L,
-//           4L  -> 0xFFFFFF86L,
-//           8L  -> 0x00008786L,
-//           12L -> 0x00000086L,
-//         ))
-//       }
-//     }
-//   }
 
 //   "Alu" - {
 //     "test 0" in {

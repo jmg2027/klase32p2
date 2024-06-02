@@ -14,7 +14,8 @@ class Hazards(implicit p: Parameters) extends CoreModule {
 
     val rs1Addr = Input(UInt(regIdWidth.W)) // 19:15
     val rs2Addr = Input(UInt(regIdWidth.W)) // 24:20
-    val rdAddr = Input(UInt(regIdWidth.W)) // 11:7, ME
+    val rdAddrIE = Input(UInt(regIdWidth.W)) // 11:7, IE
+    val rdAddrME = Input(UInt(regIdWidth.W)) // 11:7, ME
 
     // val divAddr = Input(UInt(regIdWidth.W))
     // val divBusy = Input(Bool())
@@ -23,6 +24,7 @@ class Hazards(implicit p: Parameters) extends CoreModule {
     val stall = Output(Bool())
     val bypassRS1RD = Output(Bool())
     val bypassRS2RD = Output(Bool())
+    val ldKill = Output(Bool())
   }
   )
 
@@ -39,15 +41,20 @@ class Hazards(implicit p: Parameters) extends CoreModule {
   // RS1 === Load RD
   // RS2 === Load RD
   io.bypassRS1RD := false.B
-  when(io.loadValid && io.rs1Valid && (io.rs1Addr === io.rdAddr)) {
+  when(io.loadValid && io.rs1Valid && (io.rs1Addr === io.rdAddrME)) {
     io.bypassRS1RD := true.B
   }
 
   io.bypassRS2RD := false.B
-  when (io.loadValid && io.rs2Valid && (io.rs2Addr === io.rdAddr)) {
+  when (io.loadValid && io.rs2Valid && (io.rs2Addr === io.rdAddrME)) {
     io.bypassRS2RD := true.B
   }
 
+  io.ldKill := false.B
+  // When using rd of load as next instruction's rd, ignore load
+  when(io.loadValid && (io.rdAddrIE === io.rdAddrME)) {
+    io.ldKill := true.B
+  }
   // Bypass
 
 

@@ -65,16 +65,16 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   val ie_pc = RegEnable(frontend.io.if_pc, !stall)
 
   printf(cf"===============================New Cycle===============================\n")
-  printf(cf"ie_inst: ${ie_inst}%x\n")
-  printf(cf"ie_pc: ${ie_pc}%x\n")
-  printf(cf"ctrlSig: ${ctrlSig}\n")
-  printf(cf"stallSig.ie.issue: ${stallSig.ie.issue}\n")
-  printf(cf"stallSig.ie.store: ${stallSig.ie.store}\n")
-  printf(cf"stallSig.ie.csr: ${stallSig.ie.csr}\n")
-  printf(cf"stallSig.me.load: ${stallSig.me.load}\n")
-  printf(cf"stallSig.me.wfi: ${stallSig.me.wfi}\n")
-  printf(cf"stallSig.me.hzd: ${stallSig.me.hzd}\n")
-  printf(cf"stallSig.me.fence: ${stallSig.me.fence}\n")
+  // printf(cf"ie_inst: ${ie_inst}%x\n")
+  // printf(cf"ie_pc: ${ie_pc}%x\n")
+  // printf(cf"ctrlSig: ${ctrlSig}\n")
+  // printf(cf"stallSig.ie.issue: ${stallSig.ie.issue}\n")
+  // printf(cf"stallSig.ie.store: ${stallSig.ie.store}\n")
+  // printf(cf"stallSig.ie.csr: ${stallSig.ie.csr}\n")
+  // printf(cf"stallSig.me.load: ${stallSig.me.load}\n")
+  // printf(cf"stallSig.me.wfi: ${stallSig.me.wfi}\n")
+  // printf(cf"stallSig.me.hzd: ${stallSig.me.hzd}\n")
+  // printf(cf"stallSig.me.fence: ${stallSig.me.fence}\n")
 
   //  val me_inst = RegEnable(ie_inst, bitPatToUInt(NOP), !stallME)
   val me_pc = RegEnable(ie_pc, !stallME)
@@ -146,10 +146,10 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // FIXME: Why this prints 0??
   val rs1 = Mux(!hzd.io.bypassRS1RD, reg.io.rp(0).data, lsu.io.rddata)
 //  val rs1 = reg.io.rp(0).data
-  printf(cf"reg.io.rp(0).addr: ${reg.io.rp(0).addr}\n")
-  printf(cf"reg.io.rp(0).data: ${reg.io.rp(0).data}%x\n")
-  printf(cf"reg.io.rp(1).addr: ${reg.io.rp(1).addr}\n")
-  printf(cf"reg.io.rp(1).data: ${reg.io.rp(1).data}%x\n")
+  // printf(cf"reg.io.rp(0).addr: ${reg.io.rp(0).addr}\n")
+  // printf(cf"reg.io.rp(0).data: ${reg.io.rp(0).data}%x\n")
+  // printf(cf"reg.io.rp(1).addr: ${reg.io.rp(1).addr}\n")
+  // printf(cf"reg.io.rp(1).data: ${reg.io.rp(1).data}%x\n")
   val rs2 = Mux(!hzd.io.bypassRS2RD, reg.io.rp(1).data, lsu.io.rddata)
 //  val rs2 = reg.io.rp(1).data
 
@@ -158,11 +158,10 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
    reg.io.wp(0).valid := ctrlSig.w0Wb.asUInt.orR && !stall
 //  reg.io.wp(0).valid := ctrlSig.w0Wb.asUInt.orR
   // FIXME: Decoupling
-//   reg.io.wp(1).valid := me_isLoad.asUInt.orR && !stallME
   reg.io.wp(1).valid := me_isLoad.asUInt.orR && !stallME
 //  reg.io.wp(1).valid := me_isLoad.asUInt.orR
-  printf(cf"reg.io.wp(0).valid: ${reg.io.wp(0).valid}\n")
-  printf(cf"alu.io.R: ${alu.io.R}%x\n")
+  // printf(cf"reg.io.wp(0).valid: ${reg.io.wp(0).valid}\n")
+  // printf(cf"alu.io.R: ${alu.io.R}%x\n")
 
   reg.io.wp(0).bits.data := Mux1H(Seq(
     RdType.Alu -> alu.io.R,
@@ -190,11 +189,11 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     OperandType.JImmediate -> ctrlSig.imm.j.asUInt,
     OperandType.SImmediate -> ctrlSig.imm.s.asUInt
   ).map { case (k, v) => (k === ctrlSig.operandSelect.b, v) })
-  printf(cf"ctrlSig.operandSelect.a: ${ctrlSig.operandSelect.a}\n")
-  printf(cf"ctrlSig.operandSelect.b: ${ctrlSig.operandSelect.b}\n")
-  printf(cf"alu.io.ctrl: ${alu.io.ctrl}\n")
-  printf(cf"alu.io.A: ${alu.io.A}%x\n")
-  printf(cf"alu.io.B: ${alu.io.B}%x\n")
+  // printf(cf"ctrlSig.operandSelect.a: ${ctrlSig.operandSelect.a}\n")
+  // printf(cf"ctrlSig.operandSelect.b: ${ctrlSig.operandSelect.b}\n")
+  // printf(cf"alu.io.ctrl: ${alu.io.ctrl}\n")
+  // printf(cf"alu.io.A: ${alu.io.A}%x\n")
+  // printf(cf"alu.io.B: ${alu.io.B}%x\n")
 
 
   // CSR
@@ -231,7 +230,9 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   hzd.io.rs1Addr := ctrlSig.rs1
   hzd.io.rs2Addr := ctrlSig.rs2
-  hzd.io.rdAddr := me_rdaddr
+  hzd.io.rdAddrME := me_rdaddr
+  hzd.io.rdAddrIE := ctrlSig.rd
+  lsu.io.ldKill := hzd.io.ldKill
 
   // LSU
   lsu.io.lsuctrlIE <> ctrlSig.lsuCtrl
@@ -240,8 +241,8 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   lsu.io.edm <> io.edm
   lsu.io.addr := alu.io.R
   lsu.io.wrdata := rs2
-  printf(cf"lsu.io.addr: ${lsu.io.addr}%x\n")
-  printf(cf"lsu.io.wrdata: ${lsu.io.wrdata}%x\n")
+  // printf(cf"lsu.io.addr: ${lsu.io.addr}%x\n")
+  // printf(cf"lsu.io.wrdata: ${lsu.io.wrdata}%x\n")
   lsu.io.stall := stall
   lsu.io.stallME := stallME
 

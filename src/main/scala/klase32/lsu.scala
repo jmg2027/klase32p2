@@ -29,6 +29,11 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
 
     val ldXcpt = Output(new HeartXcpt)
     val stXcpt = Output(new HeartXcpt)
+
+    val stall = Input(Bool())
+    val stallME = Input(Bool())
+
+    val ldKill = Input(Bool())
   }
   )
   // Align address
@@ -36,7 +41,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   val offsetAligned = io.addr(log2Ceil(addressAlignByte) - 1, 0)
 
   // Align store data: shift the write data based on the address offset and create a mask for the store operation
-  val storeDataAligned = io.wrdata << (offsetAligned << 3).asUInt
+  val storeDataAligned = (io.wrdata << (offsetAligned << 3.U).asUInt).asUInt
   val storeDataMask = Mux1H(
     Seq(
       (io.lsuctrlIE.lsSize === DataSize.Byte) -> ("b0001".U << offsetAligned),
@@ -64,7 +69,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
 
   // Store buffer
   val sb = Module(new QueueWithAccessableEntry(new StoreBufferEntry, storeBufferEntries, flow = true))
-  sb.io.enq.valid := io.lsuctrlIE.isStore === StoreControl.EN
+  sb.io.enq.valid := io.lsuctrlIE.isStore === StoreControl.EN && !io.stall
   io.storeFull := !sb.io.enq.ready
   sb.io.enq.bits.addr := addrAligned
   sb.io.enq.bits.data := storeDataAligned
@@ -84,11 +89,22 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   io.edm.st_mmio_reserv := DontCare
 
   // Load request issues in IE
-  io.edm.ld_req := io.lsuctrlIE.isLoad === LoadControl.EN
+  io.edm.ld_req := io.lsuctrlIE.isLoad === LoadControl.EN && !io.stall
   io.edm.ld_vaddr := addrAligned
-  io.edm.ld_kill := DontCare
+  io.edm.ld_kill := io.ldKill
   io.edm.ld_mmio_kill := DontCare
-  io.loadFull := !io.edm.ld_ack && io.edm.ld_req
+  
+  val loadOntheFly = RegInit(false.B)
+  when (io.edm.ld_req && io.edm.ld_ack) {
+    loadOntheFly := false.B
+  }.elsewhen(io.edm.ld_req) {
+    loadOntheFly := true.B
+  }.elsewhen(io.edm.ld_ack) {
+    loadOntheFly := false.B
+  }.elsewhen(io.ldKill) {
+    loadOntheFly := false.B
+  }
+  io.loadFull := loadOntheFly
 
   // Store request issues from store buffer
   io.edm.st_req := sb.io.deq.valid
@@ -99,7 +115,9 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   io.edm.st_mmio := DontCare
 
   // Response from DM: ME stage
-  io.rddata := Mux(io.edm.ld_ack, loadDataAligned, 0.U)
+  val loadData = RegInit(0.U(k.dataWidth.W))
+  loadData := Mux(io.edm.ld_ack, loadDataAligned, 0.U)
+  io.rddata := Mux(!io.stallME, loadData, 0.U)
 
   // Exception handling
   io.stXcpt := {

@@ -66,8 +66,9 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // For now 32-bit N entries
   // To extend to compressed mode, fetch queue should handle 16-bit data
   // when empty, enq data will be dequeued instantly
-  // FIXME: Should req & ack be dealt with token protocol?
-  val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = true, hasFlush = true))
+  // FIXME: Check for flow in jump
+  // val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = true, hasFlush = true))
+  val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = false, hasFlush = true))
   fq.io.enq.bits.data := io.epm.data
   fq.io.enq.bits.xcpt := io.epm.xcpt
   fq.io.enq.valid := io.epm.ack // Suppose simultaneous ack and data response
@@ -110,10 +111,10 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // Address of current instruction in IF stage
   val pcReg = RegEnable(pcWrite, bootAddrWire, (jump || issue) && !io.stall)
   io.if_pc := pcReg
-  printf(cf"[FE] pc: 0x$pcReg%x\n")
+  // printf(cf"[FE] pc: 0x$pcReg%x\n")
   // printf(cf"pcw: 0x$pcWrite%x\n")
-  printf(cf"[FE] jump: $jump\n")
-  printf(cf"[FE] issue: $issue\n")
+  // printf(cf"[FE] jump: $jump\n")
+  // printf(cf"[FE] issue: $issue\n")
   // printf(cf"boot: $regBooting\n")
   // printf(cf"fq: ${fq.io.deq.valid}\n")
   // printf(cf"stall: ${io.stall}\n")
@@ -138,6 +139,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   fqTokenNotAvail := fqToken === 0.U
 
   val fetchPC = Reg(UInt(mxLen.W))
+  printf(cf"[FE] io.exception: ${io.exception}\n")
   when(reset.asBool || regBooting) {
     fetchPC := bootAddrWire
     fq.flush := true.B
@@ -157,7 +159,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   }
 
   io.epm.addr := fetchPC
-  printf(cf"fetchPC: 0x${io.epm.addr}%x\n")
+  // printf(cf"[FE] fetchPC: 0x${io.epm.addr}%x\n")
   io.epm.req := fetch
   io.epm.flush := io.flushEn.asUInt.orR
   io.epm.cmd := 0.U // int load
