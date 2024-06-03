@@ -84,7 +84,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   Extended instruction will be issued: 32 bits
    */
   val instrAvail = fq.io.deq.valid && !regBooting
-//  val instrAvail = fq.io.deq.fire && !regBooting
+  //  val instrAvail = fq.io.deq.fire && !regBooting
   // When fq being flushed, NOP is issued(1 cycle stall)
   val issue = instrAvail && issueable
 
@@ -111,7 +111,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // Address of current instruction in IF stage
   val pcReg = RegEnable(pcWrite, bootAddrWire, (jump || issue) && !io.stall)
   io.if_pc := pcReg
-  // printf(cf"[FE] pc: 0x$pcReg%x\n")
+   printf(cf"[FE] pc: 0x$pcReg%x\n")
   // printf(cf"pcw: 0x$pcWrite%x\n")
   // printf(cf"[FE] jump: $jump\n")
   // printf(cf"[FE] issue: $issue\n")
@@ -123,20 +123,10 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   // Fetch PC
   val issueLength = 4.U
-  val fqToken = RegInit(fetchqueueEntries.U((log2Floor(fetchqueueEntries)+1).W))
-  val fqTokenNotAvail = WireDefault(false.B) // I think when token is 0 queue is full
   val fetch = WireDefault(false.B)
-//  fetch := fq.io.enq.ready && !regBooting && !fqTokenNotAvail
-//  fetch := !regBooting && !fqTokenNotAvail || io.exception || io.eret || jump
-  fetch := !fqTokenNotAvail || io.exception || io.eret || jump
-  when(io.epm.req && io.epm.ack) {
-    fqToken := fqToken
-  }.elsewhen(io.epm.req) {
-    fqToken := fqToken - 1.U
-  }.elsewhen(io.epm.ack) {
-    fqToken := fqToken + 1.U
-  }
-  fqTokenNotAvail := fqToken === 0.U
+  //  fetch := fq.io.enq.ready && !regBooting && !fqTokenNotAvail
+  //  fetch := !regBooting && !fqTokenNotAvail || io.exception || io.eret || jump
+  fetch := fq.io.enq.ready || io.exception || io.eret || jump
 
   val fetchPC = Reg(UInt(mxLen.W))
   printf(cf"[FE] io.exception: ${io.exception}\n")
@@ -144,12 +134,13 @@ class Frontend(implicit p: Parameters) extends CoreModule {
     fetchPC := bootAddrWire
     fq.flush := true.B
   }.elsewhen(io.exception || io.eret) {
-      fetchPC := io.evec
-      fq.flush := true.B
+    fetchPC := io.evec
+    fq.flush := true.B
   }.elsewhen (jump) {
     fetchPC := jumpPC
     fq.flush := true.B
-  }.elsewhen (fqTokenNotAvail) {
+//  }.elsewhen (fqTokenNotAvail) {
+  }.elsewhen (!fq.io.enq.ready) {
     fetchPC := fetchPC
     fq.flush := false.B
     // FIXME: Does this not needed?
@@ -166,9 +157,9 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   // Issue
   fq.io.deq.ready := !io.stall // issue signal will block when stalled
-//  fq.io.deq.ready := true.B
-//  io.instPacket.inst := Mux(issue, instIF, 0.U)
-//  io.instPacket.xcpt := Mux(issue, xcptIF, 0.U.asTypeOf(new HeartXcpt))
+  //  fq.io.deq.ready := true.B
+  //  io.instPacket.inst := Mux(issue, instIF, 0.U)
+  //  io.instPacket.xcpt := Mux(issue, xcptIF, 0.U.asTypeOf(new HeartXcpt))
   io.instPacket.inst := instIF
   io.instPacket.xcpt := xcptIF
   io.issue := issue
