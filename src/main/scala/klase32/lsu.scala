@@ -44,44 +44,48 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   val storeDataAligned = (io.wrdata << (offsetAligned << 3.U).asUInt).asUInt
   val storeDataMask = Mux1H(
     Seq(
-      (io.lsuctrlIE.lsSize === DataSize.Byte) -> ("b0001".U << offsetAligned),
-      (io.lsuctrlIE.lsSize === DataSize.HalfWord) -> ("b0011".U << offsetAligned),
+      (io.lsuctrlIE.lsSize === DataSize.Byte) -> ("b0001".U << offsetAligned).asUInt,
+      (io.lsuctrlIE.lsSize === DataSize.HalfWord) -> ("b0011".U << offsetAligned).asUInt,
       (io.lsuctrlIE.lsSize === DataSize.Word) -> "b1111".U,
     )
   )
 
   // Align load data: shift the loaded data based on the address offset and adjust based on the load size and sign
-  val loadOffsetAligned = RegEnable(offsetAligned, io.lsuctrlIE.isLoad === LoadControl.EN)
+  val loadOffsetAligned = RegEnable(offsetAligned, (io.lsuctrlIE.isLoad === LoadControl.EN && !io.stall))
   val loadDataAligned = {
-    val shiftedData = io.edm.ld_rdata >> (loadOffsetAligned << 3).asUInt
-    val slicedData = Mux1H(
+    val shiftedData = (io.edm.ld_rdata >> (loadOffsetAligned << 3.U).asUInt).asUInt
+//    val slicedData = Mux1H(
+    val loadData = Mux1H(
       Seq(
-        (io.lsuctrlME.lsSize === DataSize.Byte) -> shiftedData(7, 0),
-        (io.lsuctrlME.lsSize === DataSize.HalfWord) -> shiftedData(15, 0),
+        ((io.lsuctrlME.lsSize === DataSize.Byte) && (io.lsuctrlME.isSigned === SignedControl.unsigned)) -> shiftedData(7, 0),
+        ((io.lsuctrlME.lsSize === DataSize.Byte) && (io.lsuctrlME.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 8, 1.U), shiftedData(7, 0)),
+        ((io.lsuctrlME.lsSize === DataSize.HalfWord) && (io.lsuctrlME.isSigned === SignedControl.unsigned)) -> shiftedData(15, 0),
+        ((io.lsuctrlME.lsSize === DataSize.HalfWord) && (io.lsuctrlME.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 16, 1.U), shiftedData(15, 0)),
         (io.lsuctrlME.lsSize === DataSize.Word) -> shiftedData,
       )
     )
-    val signedData = Wire(UInt(xLen.W))
-    signedData := Mux(io.lsuctrlME.isSigned === SignedControl.signed, slicedData.asSInt.asUInt, slicedData.asUInt)
-    signedData
+//    printf(cf"loadOffset: $loadOffsetAligned\n")
+//    printf(cf"shiftedData: $shiftedData%x\n")
+    loadData
   }
+//  printf(cf"loaddata: $loadDataAligned%x\n")
 
 
   // Store buffer
-  val sb = Module(new QueueWithAccessableEntry(new StoreBufferEntry, storeBufferEntries, flow = true))
-  sb.io.enq.valid := io.lsuctrlIE.isStore === StoreControl.EN && !io.stall
+  // In-order Store queue will monitor whether store is done by ack
+  val sb = Module(new Queue(new StoreBufferEntry, storeBufferEntries))
+  sb.io.enq.bits.valid := true.B
+  sb.io.enq.valid := (io.lsuctrlIE.isStore === StoreControl.EN) && !io.stall
   io.storeFull := !sb.io.enq.ready
-  sb.io.enq.bits.addr := addrAligned
-  sb.io.enq.bits.data := storeDataAligned
-  sb.io.enq.bits.mask := storeDataMask
+//  printf(cf"[LSU] sb.enq: ${sb.io.enq}\n")
 
 
   // Request to DM
-  io.edm.cmd := MuxCase(0.U, 
+  io.edm.cmd := MuxCase(0.U,
     Seq(
-      (io.lsuctrlIE.isLoad === LoadControl.EN) -> M_XRD,
-      ((sb.io.deq.valid) && (sb.io.deq.bits.mask === "b1111".U)) -> M_XWR,
-      ((sb.io.deq.valid) && (sb.io.deq.bits.mask =/= "b1111".U)) -> M_XWR,
+      (io.edm.ld_req) -> M_XRD,
+      ((io.edm.st_req) && (io.edm.st_mask === "b1111".U)) -> M_XWR,
+      ((io.edm.st_req) && (io.edm.st_mask =/= "b1111".U)) -> M_XWR,
     )
   )
 
@@ -89,35 +93,49 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   io.edm.st_mmio_reserv := DontCare
 
   // Load request issues in IE
-  io.edm.ld_req := io.lsuctrlIE.isLoad === LoadControl.EN && !io.stall
+  io.edm.ld_req := (io.lsuctrlIE.isLoad === LoadControl.EN) && !io.stall
   io.edm.ld_vaddr := addrAligned
   io.edm.ld_kill := io.ldKill
   io.edm.ld_mmio_kill := DontCare
-  
-  val loadOntheFly = RegInit(false.B)
-  when (io.edm.ld_req && io.edm.ld_ack) {
-    loadOntheFly := false.B
-  }.elsewhen(io.edm.ld_req) {
-    loadOntheFly := true.B
-  }.elsewhen(io.edm.ld_ack) {
-    loadOntheFly := false.B
-  }.elsewhen(io.ldKill) {
-    loadOntheFly := false.B
+
+  val loadRequestOnthefly = RegInit(false.B)
+
+  //  io.loadFull := !io.edm.ld_ack && io.edm.ld_req
+  io.loadFull := loadRequestOnthefly
+  when (io.edm.ld_req && !io.edm.ld_ack) {
+    loadRequestOnthefly := true.B
   }
-  io.loadFull := loadOntheFly
+  when (loadRequestOnthefly) {
+    when (io.edm.ld_ack || io.ldKill) {
+      loadRequestOnthefly := false.B
+    }
+  }
 
   // Store request issues from store buffer
-  io.edm.st_req := sb.io.deq.valid
+  // FIXME: Why do we need to stall signals for enq/deq?
+  // FIXME: Within TCM address bound, store should not be stalled
+  // FIXME: TCM address comes from io port
+//  io.edm.st_req := sb.io.deq.valid && !io.stall
+  // Request is sent when store buffer can accept store request
+  // Store buffer will dequeue when ack arrives
+  io.edm.st_req := sb.io.enq.fire
   sb.io.deq.ready := io.edm.st_ack
-  io.edm.st_paddr := sb.io.deq.bits.addr
-  io.edm.st_wdata := sb.io.deq.bits.data
-  io.edm.st_mask := sb.io.deq.bits.mask
+  io.edm.st_paddr := addrAligned
+  io.edm.st_wdata := storeDataAligned
+  io.edm.st_mask := storeDataMask
   io.edm.st_mmio := DontCare
+  printf(cf"[LSU]io.edm: ${io.edm}\n")
 
   // Response from DM: ME stage
   val loadData = RegInit(0.U(k.dataWidth.W))
-  loadData := Mux(io.edm.ld_ack, loadDataAligned, 0.U)
-  io.rddata := Mux(!io.stallME, loadData, 0.U)
+  when (io.edm.ld_ack && io.stallME) {
+    io.rddata := 0.U
+    loadData := loadDataAligned
+  }.elsewhen (!io.stallME) {
+    io.rddata := loadData
+  }.otherwise {
+    io.rddata := loadDataAligned
+  }
 
   // Exception handling
   io.stXcpt := {
