@@ -130,9 +130,10 @@ class FetchQueueEntry(implicit p: Parameters) extends CoreBundle {
 class StoreBufferEntry(implicit p: Parameters) extends CoreBundle {
  val k = p(KLASE32ParamKey)
 
- val addr = UInt(k.addrWidth.W)
- val data = UInt(xLen.W)
- val mask = UInt((wordsize/8).W)
+// val addr = UInt(k.addrWidth.W)
+// val data = UInt(xLen.W)
+// val mask = UInt((wordsize/8).W)
+ val valid = Bool()
 }
 
 class EdmIntf(implicit p: Parameters) extends CoreBundle {
