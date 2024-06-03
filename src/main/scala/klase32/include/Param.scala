@@ -37,6 +37,7 @@ object param {
                                fetchqueueEntries: Int = 4,
                                loadstorequeueEntries: Int = 4,
                                storeBufferEntries: Int = 2,
+//                               storeBufferEntries: Int = 4,
 
                                causeWidth: Int = 4,
                                hartIDWidth: Int = 4,
