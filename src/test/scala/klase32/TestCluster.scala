@@ -41,6 +41,28 @@ abstract class TestCluster(
     edmLatency,
   )(this)
 
+//  val epmGntResp = RegNext(epm.gnt)
+//  val epmAckResp0 = RegNext(epm.ack)
+//  val epmAckResp = RegNext(epmAckResp0)
+//  val epmDataResp = RegNext(epm.data)
+//  val epmXcptResp = RegNext(epm.xcpt)
+//  val edmLdAckResp = RegNext(edm.ld_ack)
+//  val edmLdRdataResp = RegNext(edm.ld_rdata)
+//  val edmStAckResp = RegNext(edm.st_ack)
+//
+//  val epmRespDelayed = Wire(new EpmIntf)
+//
+//  epm.req := epmRespDelayed.req
+//  epm.cmd := epmRespDelayed.cmd
+//  epm.addr := epmRespDelayed.addr
+//  epm.kill := epmRespDelayed.kill
+//  epm.flush := epmRespDelayed.flush
+//  epmRespDelayed.gnt := epm.gnt
+//  epmRespDelayed.ack := epm.ack
+//  epmRespDelayed.bootAddr := epm.bootAddr
+//  epmRespDelayed.data := epm.data
+//  epmRespDelayed.xcpt := epm.xcpt
+
   var interrupt = TestInterrupt(false, false, false)
 
   def extInterrupt(v: Boolean = true) = interrupt.e = v
@@ -188,7 +210,7 @@ class ClusterTestMem(
     val req = instReqQueue.front
     if (!(req.req)) {
       dut.epm.ack.poke(false)
-      dut.epm.data.poke(0)
+//      dut.epm.data.poke(0)
       dut.epm.xcpt.poke(dut.noXcpt)
 
       instReqQueue.dequeue()
@@ -230,24 +252,23 @@ class ClusterTestMem(
       dut.edm.xcpt.poke(dut.noXcpt)
 
       dataReqQueue.dequeue()
-    } else {
-      if (req.load.ld_req) {
-        val ld_data = load(req.load.ld_vaddr)
-        println(f"[Mem] Load To addr(${req.load.ld_vaddr}%X) data($ld_data%X)")
-        dut.edm.ld_rdata.poke(ld_data)
-        dut.edm.ld_ack.poke(true)
-        dut.edm.xcpt.poke(dut.noXcpt)
+    } else if (req.load.ld_req) {
+      val ld_data = load(req.load.ld_vaddr)
+      println(f"[Mem] Load To addr(${req.load.ld_vaddr}%X) data($ld_data%X)")
+      dut.edm.ld_rdata.poke(ld_data)
+      dut.edm.ld_ack.poke(true)
+      dut.edm.xcpt.poke(dut.noXcpt)
 
-        dataReqQueue.dequeue()
-      }
-      else {
-        storeStrb(req.store.st_paddr, req.store.st_wdata, req.store.st_mask)
-        dut.edm.st_ack.poke(true)
-        dut.edm.xcpt.poke(dut.noXcpt)
-
-        dataReqQueue.dequeue()
-      }
+      dataReqQueue.dequeue()
     }
+    else {
+      storeStrb(req.store.st_paddr, req.store.st_wdata, req.store.st_mask)
+      dut.edm.st_ack.poke(true)
+      dut.edm.xcpt.poke(dut.noXcpt)
+
+      dataReqQueue.dequeue()
+    }
+
 
     if (dataReqQueue.size == dataLatency - 1) {
       val ldReqValid = dut.edm.ld_req.peekBoolean()
