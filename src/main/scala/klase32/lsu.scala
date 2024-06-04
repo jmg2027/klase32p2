@@ -58,9 +58,9 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
     val loadData = Mux1H(
       Seq(
         ((io.lsuctrlME.lsSize === DataSize.Byte) && (io.lsuctrlME.isSigned === SignedControl.unsigned)) -> shiftedData(7, 0),
-        ((io.lsuctrlME.lsSize === DataSize.Byte) && (io.lsuctrlME.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 8, 1.U), shiftedData(7, 0)),
+        ((io.lsuctrlME.lsSize === DataSize.Byte) && (io.lsuctrlME.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 8, shiftedData(7)), shiftedData(7, 0)),
         ((io.lsuctrlME.lsSize === DataSize.HalfWord) && (io.lsuctrlME.isSigned === SignedControl.unsigned)) -> shiftedData(15, 0),
-        ((io.lsuctrlME.lsSize === DataSize.HalfWord) && (io.lsuctrlME.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 16, 1.U), shiftedData(15, 0)),
+        ((io.lsuctrlME.lsSize === DataSize.HalfWord) && (io.lsuctrlME.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 16, shiftedData(15)), shiftedData(15, 0)),
         (io.lsuctrlME.lsSize === DataSize.Word) -> shiftedData,
       )
     )
@@ -111,6 +111,10 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
     }
   }
 
+  // FIXME: to prevent glitch..?
+//  val stAckCapture = RegNext(io.edm.st_ack, false.B)
+//  val ldAckCapture = RegNext(io.edm.ld_ack, false.B)
+
   // Store request issues from store buffer
   // FIXME: Why do we need to stall signals for enq/deq?
   // FIXME: Within TCM address bound, store should not be stalled
@@ -120,6 +124,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   // Store buffer will dequeue when ack arrives
   io.edm.st_req := sb.io.enq.fire
   sb.io.deq.ready := io.edm.st_ack
+//  sb.io.deq.ready := stAckCapture
   io.edm.st_paddr := addrAligned
   io.edm.st_wdata := storeDataAligned
   io.edm.st_mask := storeDataMask
@@ -142,6 +147,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
     val result = Wire(new HeartXcpt)
     (result.getElements zip io.edm.xcpt.getElements).foreach {
       case (a, b) => a.asInstanceOf[Bool] := b.asInstanceOf[Bool] && io.edm.st_ack
+//      case (a, b) => a.asInstanceOf[Bool] := b.asInstanceOf[Bool] && stAckCapture
     }
     result
   }
