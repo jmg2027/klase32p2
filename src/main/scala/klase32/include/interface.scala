@@ -81,6 +81,24 @@ class Stall extends StallBundle {
  }
 }
 
+class FlushBundle extends Bundle {
+ def orR = this.asUInt.orR
+}
+
+class Flush extends FlushBundle {
+ val ie = new FlushBundle {
+  val jump = Bool()
+  val csr = Bool()
+  val fence = Bool()
+ }
+// val me = new FlushBundle {
+//  val load = Bool()
+//  val hzd = Bool()
+//  val fence = Bool()
+//  val wfi = Bool()
+// }
+}
+
 class ExternalMemoryInterfaceReq(implicit p: Parameters) extends Bundle {
  val k = p(KLASE32ParamKey)
 
