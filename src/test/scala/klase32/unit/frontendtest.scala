@@ -23,7 +23,7 @@ class FrontendTest extends KlasTest {
         dut.io.divBusy.poke(false)
         dut.io.stall.poke(false)
         dut.io.aluR.poke(0)
-        dut.io.flushEn.poke(IcacheFlushIE.default)
+        dut.io.flushIcache.poke(IcacheFlushIE.default)
         dut.io.epm.bootAddr.poke(0)
         dut.io.epm.data.poke(0)
         dut.io.epm.xcpt.poke(chiselTypeOf(dut.io.epm.xcpt).Lit(
