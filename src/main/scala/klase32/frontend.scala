@@ -19,6 +19,8 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
   val stall = Input(Bool())
 
   val aluR = Input(UInt(mxLen.W))
+  val ie_pc = Input(UInt(mxLen.W))
+  val brOffset = Input(UInt(13.W))
 
   val issue = Output(Bool())
 
@@ -27,7 +29,8 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
     val xcpt = new HeartXcpt
   }) // IF stage
 
-  val flushEn = Input(IcacheFlushIE())
+  val flushIcache = Input(IcacheFlushIE())
+  val flushPipeline = Output(Bool())
 
   val epm = new EpmIntf
 }
@@ -72,12 +75,26 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   fq.io.enq.bits.data := io.epm.data
   fq.io.enq.bits.xcpt := io.epm.xcpt
   fq.io.enq.valid := io.epm.ack // Suppose simultaneous ack and data response
+  // Prevent overflow request
+  val fqToken = RegInit(fetchqueueEntries.U)
+
+  when (fq.io.flush.getOrElse(false.B)) {
+    fqToken := fetchqueueEntries.U
+  }.elsewhen (fq.io.enq.fire && fq.io.deq.fire) {
+    fqToken := fqToken
+  }.elsewhen (fq.io.enq.fire) {
+    fqToken := fqToken - 1.U
+  }.elsewhen (fq.io.deq.fire) {
+    fqToken := fqToken + 1.U
+  }.elsewhen (fq.io.flush.getOrElse(false.B)) {
+    fqToken := fetchqueueEntries.U
+  }
+  val fqTokenNotAvail = fqToken === 1.U
 
   // Why this generates nullpointerexception?
   //  def isRVC(inst: UInt): Bool = !(inst(1) && inst(0))
 
   // Issue
-  //  val issueable = !io.stall && !io.divBusy
   val issueable = !io.divBusy
   /* FIXME: RVC
   Fetch queue will fetch fetchwidth. fetchqueue should store 2 bytes align
@@ -97,8 +114,11 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val jalrIE = jalrCond && !io.stall
   //  val jump = brIE || jalIE || jalrIE || regBooting
   val jump = brIE || jalIE || jalrIE
+  io.flushPipeline := jump
 
-  val jumpPC = io.aluR
+  val brAddr = io.ie_pc + io.brOffset
+//  val jumpPC = Mux(brIE, (io.ie_pc + io.brOffset), io.aluR)
+  val jumpPC = Mux(brIE, brAddr, io.aluR)
 
   val pcWrite = Wire(UInt())
 
@@ -112,7 +132,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val pcReg = RegEnable(pcWrite, bootAddrWire, (jump || issue) && !io.stall)
   io.if_pc := pcReg
    printf(cf"[FE] pc: 0x$pcReg%x\n")
-  // printf(cf"pcw: 0x$pcWrite%x\n")
+   printf(cf"pcw: 0x$pcWrite%x\n")
   // printf(cf"[FE] jump: $jump\n")
   // printf(cf"[FE] issue: $issue\n")
   // printf(cf"boot: $regBooting\n")
@@ -126,25 +146,30 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val fetch = WireDefault(false.B)
   //  fetch := fq.io.enq.ready && !regBooting && !fqTokenNotAvail
   //  fetch := !regBooting && !fqTokenNotAvail || io.exception || io.eret || jump
-  fetch := fq.io.enq.ready || io.exception || io.eret || jump
+//  fetch := (fq.io.enq.ready || io.exception || io.eret || jump) && (!reset.asBool && !regBooting)
 
   val fetchPC = Reg(UInt(mxLen.W))
   printf(cf"[FE] io.exception: ${io.exception}\n")
   when(reset.asBool || regBooting) {
+    fetch := false.B
     fetchPC := bootAddrWire
     fq.flush := true.B
   }.elsewhen(io.exception || io.eret) {
+    fetch := fq.io.enq.ready
     fetchPC := io.evec
     fq.flush := true.B
   }.elsewhen (jump) {
+    fetch := fq.io.enq.ready
     fetchPC := jumpPC
     fq.flush := true.B
-//  }.elsewhen (fqTokenNotAvail) {
-  }.elsewhen (!fq.io.enq.ready) {
+  }.elsewhen (fqTokenNotAvail) {
+//  }.elsewhen (!fq.io.enq.ready) {
+    fetch := false.B
     fetchPC := fetchPC
     fq.flush := false.B
     // FIXME: Does this not needed?
   }.otherwise {
+    fetch := fq.io.enq.ready
     fetchPC := fetchPC + issueLength
     fq.flush := false.B
   }
@@ -152,7 +177,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   io.epm.addr := fetchPC
   // printf(cf"[FE] fetchPC: 0x${io.epm.addr}%x\n")
   io.epm.req := fetch
-  io.epm.flush := io.flushEn.asUInt.orR
+  io.epm.flush := io.flushIcache.asUInt.orR
   io.epm.cmd := 0.U // int load
 
   // Issue
