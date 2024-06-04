@@ -59,10 +59,19 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   val stallME = stallSig.me.orR
   val stall = stallIE || stallME
 
+  // Flush
+  // FIXME: Can be optimized
+  val flushSig = WireInit(new Flush, DontCare)
+  flushSig.ie.jump := frontend.io.flushPipeline
+  flushSig.ie.csr := csr.io.csrWrite
+  flushSig.ie.fence := ctrlSig.fence.asUInt.orR && (lsu.io.loadFull || lsu.io.storeFull)
+  val flushIE = flushSig.ie.orR
+  val flush = reset.asBool || flushIE
+
   // Pipeline
-//  val ie_inst = RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall && frontend.io.issue)
-  val ie_inst = RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall)
-  val ie_pc = RegEnable(frontend.io.if_pc, !stall)
+  //  val ie_inst = RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall && frontend.io.issue)
+  val ie_inst = withReset(flush) {RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall)}
+  val ie_pc = withReset(flush) {RegEnable(frontend.io.if_pc, !stall)}
 
   printf(cf"===============================New Cycle===============================\n")
   // printf(cf"ie_inst: ${ie_inst}%x\n")
@@ -77,11 +86,11 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // printf(cf"stallSig.me.fence: ${stallSig.me.fence}\n")
 
   //  val me_inst = RegEnable(ie_inst, bitPatToUInt(NOP), !stallME)
-  val me_pc = RegEnable(ie_pc, !stallME)
-  val me_lsu = RegEnable(ctrlSig.lsuCtrl, !stallME)
-  val me_isLoad = RegEnable(ctrlSig.lsuCtrl.isLoad, !stallME)
-  val me_rdaddr = RegEnable(ctrlSig.rd, !stallME)
-  val me_aluR = RegEnable(alu.io.R, !stallME)
+  val me_pc = withReset(flush) {RegEnable(ie_pc, !stallME)}
+  val me_lsu = withReset(flush) {RegEnable(ctrlSig.lsuCtrl, !stallME)}
+  val me_isLoad = withReset(flush) {RegEnable(ctrlSig.lsuCtrl.isLoad, !stallME)}
+  val me_rdaddr = withReset(flush) {RegEnable(ctrlSig.rd, !stallME)}
+  val me_aluR = withReset(flush) {RegEnable(alu.io.R, !stallME)}
 
 
   // Exception
@@ -122,7 +131,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   // ctrl
   frontend.io.ctrl := ctrlSig.frontendCtrl
-  frontend.io.flushEn := ctrlSig.flushICache
+  frontend.io.flushIcache := ctrlSig.flushICache
 
   frontend.io.divBusy := DontCare
 
@@ -134,7 +143,8 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   frontend.io.stall := stall
 
   frontend.io.aluR := alu.io.R
-
+  frontend.io.brOffset := ctrlSig.imm.b.asUInt
+  frontend.io.ie_pc := ie_pc
 
   // Decode
   dec.io.inst := ie_inst
@@ -145,21 +155,21 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   reg.io.rp(1).addr := ctrlSig.rs2
   // FIXME: Why this prints 0??
   val rs1 = Mux(!hzd.io.bypassRS1RD, reg.io.rp(0).data, lsu.io.rddata)
-//  val rs1 = reg.io.rp(0).data
+  //  val rs1 = reg.io.rp(0).data
   // printf(cf"reg.io.rp(0).addr: ${reg.io.rp(0).addr}\n")
   // printf(cf"reg.io.rp(0).data: ${reg.io.rp(0).data}%x\n")
   // printf(cf"reg.io.rp(1).addr: ${reg.io.rp(1).addr}\n")
   // printf(cf"reg.io.rp(1).data: ${reg.io.rp(1).data}%x\n")
   val rs2 = Mux(!hzd.io.bypassRS2RD, reg.io.rp(1).data, lsu.io.rddata)
-//  val rs2 = reg.io.rp(1).data
+  //  val rs2 = reg.io.rp(1).data
 
   reg.io.wp(0).bits.addr := ctrlSig.rd
   reg.io.wp(1).bits.addr := me_rdaddr
-   reg.io.wp(0).valid := ctrlSig.w0Wb.asUInt.orR && !stall
-//  reg.io.wp(0).valid := ctrlSig.w0Wb.asUInt.orR
+  reg.io.wp(0).valid := ctrlSig.w0Wb.asUInt.orR && !stall
+  //  reg.io.wp(0).valid := ctrlSig.w0Wb.asUInt.orR
   // FIXME: Decoupling
   reg.io.wp(1).valid := me_isLoad.asUInt.orR && !stallME
-//  reg.io.wp(1).valid := me_isLoad.asUInt.orR
+  //  reg.io.wp(1).valid := me_isLoad.asUInt.orR
   // printf(cf"reg.io.wp(0).valid: ${reg.io.wp(0).valid}\n")
   // printf(cf"alu.io.R: ${alu.io.R}%x\n")
 
@@ -196,6 +206,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // printf(cf"alu.io.B: ${alu.io.B}%x\n")
 
 
+
   // CSR
   csr.io.ctrl.inst := ctrlSig.csrCtrl
   csr.io.ctrl.in := alu.io.R
@@ -224,8 +235,8 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   hzd.io.rs1Valid := ((OperandType.Reg) === (ctrlSig.operandSelect.a))
   // RS2: ALU.B || Store || Branch
   hzd.io.rs2Valid := ((ctrlSig.operandSelect.b) === (OperandType.Reg)) ||
-      ((ctrlSig.frontendCtrl) === (FrontendControlIE.BR)) ||
-      ((ctrlSig.lsuCtrl.isStore) === (StoreControl.EN))
+    ((ctrlSig.frontendCtrl) === (FrontendControlIE.BR)) ||
+    ((ctrlSig.lsuCtrl.isStore) === (StoreControl.EN))
   hzd.io.loadValid := me_isLoad === LoadControl.EN
 
   hzd.io.rs1Addr := ctrlSig.rs1
