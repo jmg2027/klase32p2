@@ -35,7 +35,7 @@ object param {
 
                                outstandingLoad: Int = 2,
                                fetchqueueEntries: Int = 4,
-//                               fetchqueueEntries: Int = 3,
+//                               fetchqueueEntries: Int = 2,
                                loadstorequeueEntries: Int = 4,
                                storeBufferEntries: Int = 2,
 //                               storeBufferEntries: Int = 4,
