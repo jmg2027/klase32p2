@@ -613,7 +613,7 @@ class SingleCoreMulDivClusterSpec extends SnitchTester {
            dut.run()
            testMem(dut)(Seq(
              0x0L  -> 0x40001100L,
-             0x4L  -> 0x1L,
+             0x4L  -> 0x0L,
            ))
          }
        }
