@@ -44,13 +44,11 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // control signal
   val ctrlSig = dec.io.decSig
 
-
-
   // Stall
   val stallSig = WireInit(new Stall, DontCare)
   stallSig.ie.issue := !frontend.io.issue
   stallSig.ie.store := lsu.io.storeFull
-  stallSig.ie.csr := csr.io.csrWrite
+  // stallSig.ie.csr := csr.io.csrWrite
   stallSig.me.load := lsu.io.loadFull
   stallSig.me.wfi := csr.io.wfiOut
   stallSig.me.hzd := hzd.io.stall
@@ -62,7 +60,10 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // Flush
   // FIXME: Can be optimized
   val flushSig = WireInit(new Flush, DontCare)
-  flushSig.ie.jump := frontend.io.flushPipeline
+  flushSig.ie.jump := frontend.io.jump
+  // flushSig.ie.xcpt := meXcpt
+  flushSig.ie.xcpt := frontend.io.exception
+  flushSig.ie.eret := ctrlSig.ecall.asUInt.orR || ctrlSig.ebreak.asUInt.orR || ctrlSig.mret.asUInt.orR
   flushSig.ie.csr := csr.io.csrWrite
   flushSig.ie.fence := ctrlSig.fence.asUInt.orR && (lsu.io.loadFull || lsu.io.storeFull)
   val flushIE = flushSig.ie.orR
@@ -132,12 +133,15 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // ctrl
   frontend.io.ctrl := ctrlSig.frontendCtrl
   frontend.io.flushIcache := ctrlSig.flushICache
+  frontend.io.flushFetchQueue := flushSig ; dontTouch(frontend.io.flushFetchQueue)
 
   frontend.io.divBusy := DontCare
 
   frontend.io.evec := csr.io.evec
   frontend.io.cnd := alu.io.F
-  frontend.io.exception := meXcpt
+  // FIXME: Should handle this
+  // frontend.io.exception := meXcpt
+  frontend.io.exception := ieXcpt
   frontend.io.eret := ctrlSig.ecall.asUInt.orR || ctrlSig.ebreak.asUInt.orR || ctrlSig.mret.asUInt.orR
 
   frontend.io.stall := stall

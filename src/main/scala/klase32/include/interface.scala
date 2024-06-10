@@ -90,6 +90,8 @@ class Flush extends FlushBundle {
   val jump = Bool()
   val csr = Bool()
   val fence = Bool()
+  val xcpt = Bool()
+  val eret = Bool()
  }
 // val me = new FlushBundle {
 //  val load = Bool()

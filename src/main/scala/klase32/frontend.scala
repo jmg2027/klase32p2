@@ -29,8 +29,9 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
     val xcpt = new HeartXcpt
   }) // IF stage
 
+  val flushFetchQueue = Input(new Flush())
   val flushIcache = Input(IcacheFlushIE())
-  val flushPipeline = Output(Bool())
+  val jump = Output(Bool())
 
   val epm = new EpmIntf
 }
@@ -75,10 +76,9 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val jalrIE = jalrCond && !io.stall
   //  val jump = brIE || jalIE || jalrIE || regBooting
   val jump = brIE || jalIE || jalrIE
-  io.flushPipeline := jump
+  io.jump := jump
 
   val brAddr = io.ie_pc + io.brOffset
-  //  val jumpPC = Mux(brIE, (io.ie_pc + io.brOffset), io.aluR)
   val jumpPC = Mux(brIE, brAddr, io.aluR)
 
   // Fetch Queue
@@ -91,10 +91,8 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = false, hasFlush = true))
 
   // Fetch
-//  val fetch = WireDefault(false.B)
-
   // Fetch counter
-  val fqCounter = withReset(reset.asBool || fq.io.flush.getOrElse(false.B)) { RegInit((fetchqueueEntries - 1).U) }
+  val fqCounter = withReset(reset.asBool || fq.flush) { RegInit((fetchqueueEntries - 1).U) }
 
   when (fq.io.enq.fire && fq.io.deq.fire) {
     fqCounter := fqCounter
@@ -114,6 +112,13 @@ class Frontend(implicit p: Parameters) extends CoreModule {
       xcptReqOntheway := false.B
   }
 
+  // Flush fetch queue
+  fq.flush := io.flushFetchQueue.ie.xcpt || 
+  io.flushFetchQueue.ie.jump || 
+  io.flushFetchQueue.ie.eret || 
+  io.flushFetchQueue.ie.csr
+  // Fence does not flush fetch queue
+  // fq.flush := io.flushFetchQueue.orR
 
   val fetch = fetchAvail && !regBooting && !xcptReqOntheway
   val fetchPC = Reg(UInt(mxLen.W))
@@ -122,23 +127,25 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   when(regBooting) {
 //    fetch := false.B
     fetchPC := bootAddrWire
-    fq.flush := false.B
+    // fq.flush := false.B
   }.elsewhen(io.exception || io.eret) {
 //    fetch := fq.io.enq.ready
 //    fetch := true.B
     fetchPC := io.evec
-    fq.flush := true.B
+    // fq.flush := true.B
   }.elsewhen(jump) {
 //    fetch := fq.io.enq.ready
 //    fetch := true.B
     fetchPC := jumpPC
-    fq.flush := true.B
+    // fq.flush := true.B
+  }.elsewhen(io.flushFetchQueue.ie.csr.orR) {
+    fetchPC := io.ie_pc + 4.U
   }.elsewhen(fetch) {
     fetchPC := fetchPC + 4.U
-    fq.flush := false.B
+    // fq.flush := false.B
   }.otherwise {
     fetchPC := fetchPC
-    fq.flush := false.B
+    // fq.flush := false.B
   }
 //}.elsewhen(!fetch) {
 ////    fetch := false.B
@@ -159,7 +166,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // For exception(async exception), only 1 request will comes out
   val reqCounter = RegInit(0.U(log2Ceil(fetchqueueEntries * 2 - 1).W))
   val ignoreAck = RegInit(false.B)
-  when(fq.io.flush.getOrElse(false.B)) {
+  when(fq.flush) {
     reqCounter := reqCounter + (fetchqueueEntries - 1).U - fqCounter
     ignoreAck := true.B
   }
@@ -177,7 +184,9 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // printf(cf"[FE] fetchPC: 0x${io.epm.addr}%x\n")
   //  io.epm.req := fetch
   io.epm.req := fetch
+  // FIXME: Should be handled in the future
   io.epm.flush := io.flushIcache.asUInt.orR
+  // io.epm.flush := io.flushIcache.asUInt.orR || io.flushFetchQueue.ie.csr
   io.epm.cmd := 0.U // int load
 
   fq.io.enq.bits.data := io.epm.data
@@ -207,7 +216,8 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   // PC Register
   // Address of current instruction in IF stage
-  val pcReg = RegEnable(pcWrite, bootAddrWire, (jump || issue) && !io.stall)
+  // val pcReg = RegEnable(pcWrite, bootAddrWire, (jump || issue) && !io.stall)
+  val pcReg = RegEnable(pcWrite, bootAddrWire, !io.stall && fetch)
   io.if_pc := pcReg
    printf(cf"[FE] pc: 0x$pcReg%x\n")
    printf(cf"pcw: 0x$pcWrite%x\n")
@@ -217,7 +227,8 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // printf(cf"fq: ${fq.io.deq.valid}\n")
   // printf(cf"stall: ${io.stall}\n")
 
-  pcWrite := Mux(jump, jumpPC, pcReg + 4.U)
+  // pcWrite := Mux(jump, jumpPC, pcReg + 4.U)
+  pcWrite := Mux(fq.flush, fetchPC, pcReg + 4.U)
 
 
 

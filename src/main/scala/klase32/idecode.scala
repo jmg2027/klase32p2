@@ -385,33 +385,45 @@ object RV32IDecode extends InstDecode {
     new InstPattern(LHU, LoadCompProperty(DataSize.HalfWord, SignedControl.unsigned)),
 
     new InstPattern(CSRRW,
+      AluProperty(ALUControlIE.ADD) ++
       OpCompProperty(OperandType.Reg, OperandType.None) ++
         CSRControlProperty(CSRControl.RW) ++
+      W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRWI,
+      AluProperty(ALUControlIE.ADD) ++
       OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
         CSRControlProperty(CSRControl.RW) ++
+      W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRS,
+      AluProperty(ALUControlIE.ADD) ++
       OpCompProperty(OperandType.Reg, OperandType.None) ++
         CSRControlProperty(CSRControl.RS) ++
+      W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRSI,
+      AluProperty(ALUControlIE.ADD) ++
       OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
         CSRControlProperty(CSRControl.RS) ++
+      W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRC,
+      AluProperty(ALUControlIE.ADD) ++
       OpCompProperty(OperandType.Reg, OperandType.None) ++
         CSRControlProperty(CSRControl.RC) ++
+      W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRCI,
+      AluProperty(ALUControlIE.ADD) ++
       OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
         CSRControlProperty(CSRControl.RC) ++
+      W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
 
