@@ -175,7 +175,9 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   reg.io.wp(0).bits.data := Mux1H(Seq(
     RdType.Alu -> alu.io.R,
-    RdType.ConsecPC -> (frontend.io.if_pc + 4.U),
+//    RdType.ConsecPC -> (frontend.io.if_pc + 4.U),
+//    RdType.ConsecPC -> (frontend.io.if_pc),
+    RdType.ConsecPC -> (frontend.io.ie_pc + 4.U),
     RdType.BypassCSR -> csr.io.rd
   ).map {case(k, v) => (k === ctrlSig.rdType, v)})
   reg.io.wp(1).bits.data := lsu.io.rddata
