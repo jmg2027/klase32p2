@@ -298,6 +298,21 @@ case class LoadCompProperty(lsSize: DataSize.Type, isSigned: SignedControl.Type 
     UseRdProperty(true.B)
 )
 
+case class JumpCompProperty(frontendControl: FrontendControlIE.Type) extends InstProperty(
+  AluProperty(ALUControlIE.ADD) ++
+    OpCompProperty.tupled(
+      {
+         frontendControl match {
+          case FrontendControlIE.JAL => (OperandType.PC, OperandType.JImmediate)
+          case FrontendControlIE.JALR => (OperandType.Reg, OperandType.IImmediate)
+        }
+      }
+    ) ++
+  RdProperty(RdType.ConsecPC) ++
+  CtrlControlIEProperty(frontendControl) ++
+  W0WritebackProperty(W0WritebackIE.EN)
+)
+
 case class RetCompProperty(frontendControl: FrontendControlIE.Type) extends InstProperty(
   W0WritebackProperty(W0WritebackIE.EN) ++
     CtrlControlIEProperty(frontendControl)
@@ -335,22 +350,27 @@ object RV32IDecode extends InstDecode {
     new InstPattern(AUIPC, AluCompProperty(ALUControlIE.ADD, OperandType.PC, OperandType.UImmediate)),
 
     new InstPattern(JAL,
-      OpCompProperty(OperandType.PC, OperandType.JImmediate) ++
-        RdProperty(RdType.ConsecPC) ++
-        CtrlControlIEProperty(FrontendControlIE.JAL) ++
-        W0WritebackProperty(W0WritebackIE.EN)
+//      AluProperty(ALUControlIE.ADD) ++
+//      OpCompProperty(OperandType.PC, OperandType.JImmediate) ++
+//      RdProperty(RdType.ConsecPC) ++
+//      CtrlControlIEProperty(FrontendControlIE.JAL) ++
+//      W0WritebackProperty(W0WritebackIE.EN)
+      JumpCompProperty(FrontendControlIE.JAL)
     ),
 
     new InstPattern(JALR,
-      OpCompProperty(OperandType.Reg, OperandType.IImmediate) ++
-        RdProperty(RdType.ConsecPC) ++
-        CtrlControlIEProperty(FrontendControlIE.JALR)
+//      AluProperty(ALUControlIE.ADD) ++
+//      OpCompProperty(OperandType.Reg, OperandType.IImmediate) ++
+//      RdProperty(RdType.ConsecPC) ++
+//      CtrlControlIEProperty(FrontendControlIE.JALR) ++
+//      W0WritebackProperty(W0WritebackIE.EN)
+      JumpCompProperty(FrontendControlIE.JALR)
     ),
 
     new InstPattern(BEQ, BranchCompProperty(ALUControlIE.EQ)),
     new InstPattern(BNE, BranchCompProperty(ALUControlIE.NE)),
-    new InstPattern(BLT, BranchCompProperty(ALUControlIE.SLT)),
-    new InstPattern(BLTU, BranchCompProperty(ALUControlIE.SLTU)),
+    new InstPattern(BLT, BranchCompProperty(ALUControlIE.LT)),
+    new InstPattern(BLTU, BranchCompProperty(ALUControlIE.LTU)),
     new InstPattern(BGE, BranchCompProperty(ALUControlIE.GE)),
     new InstPattern(BGEU, BranchCompProperty(ALUControlIE.GEU)),
 
