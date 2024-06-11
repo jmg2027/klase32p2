@@ -1,0 +1,63 @@
+fetch queue 동작:
+1. fetch
+- queue에서 req를 보냈을 때 항상 data를 받을 수 있다는게 보장될 때 fetch (fqCounter = deq.fire - enq.fire)
+2. issue
+- queue에 entry가 있을 때 issue (valid한 entry)
+- pipeline stall시 stall
+3. flush
+- flush면 fq queue counter는 reset된다
+- branch 시 flush하고 다시 request하는데, req는 ack 다 받을때까지 기다려야함. 그리고 이 경우 enq valid는 새로운 req에 대한 ack가 올때까지 막아야함 
+-> 기존 req들이 다 끝난 이후 req를 준다
+혹은
+-> flush면 다시 fq counter가 초기화되므로 다시 fetch queue cnt만큼 req 바로 보낼 수 있다. 그러므로 기존 req에 대한 ack에 대해서는 enq.valid를 주지 말고 이후에 enq.valid를 주도록 수정
+-> 현재 onthefly request의 갯수를 보여주는 req counter가 있고, flush가 발생하면 ack ignore를 트리거. ack를 다 받고 req counter가 0이 되면 enq.valid
+-> 그런데 이러면 flush가 무한히 발생하는 상황에서 req counter가 무한히 커질 수가 있는 문제가 있음
+-> flush는 jump와 exception에서 발생하는데, jump와 sync exception은 pipeline의 execute 단까지 fetch해온 inst가 가야 알 수 있으므로 req counter는 fetch queue size의 두배면 된다.
+-> interrupt 같은 async exception이 문제인데 exception은 flush후 req 하나만 보내고 그거에 대해서 ack 올때까지 req 못보내도록 한다
+-> 아래는 무시해도 됨. 그냥 req counter로 처리 가능.
+-> flush가 발생하고 나면 pipeline이 stall이 걸림. 이후 ack가 올때까지 pipeline은 멈춰있음. 즉 enq.valid는 0임. 그러면 flush 발생 후 req 갯수를 따로 세서 이 cnt가 끝날때까지 flush가 안나오면 무시하고 이 사이에 flush가 나오면 이 cnt를 req counter에 추가해준다.
+
+문제 1. fqCounter 값이 3이 되고 나서 
+
+
+:::RVC:::
+32, 16/16, 32(0)/16은 prevInstInvalid 안봐도 될듯??
+32       	 : (!prevInstInvalid), (inst(0,1) === b11 && (PC(1) === 0))
+16/16   	 : (!prevInstInvalid), (inst(0,1) =/= b11 && inst(16,17) =/= b11)
+32(0)/16   : (!prevInstInvalid), (inst(0,1) =/= b11 && inst(16,17) === b11)
+16/32(1)	 : 기존에 32(0)이 남아있는 경우 (prevInstInvalid), inst(16,17) =/= b11
+32(0)/32(1): 기존에 32(0)이 남아있는 경우 (prevInstInvalid), inst(16,17) === b11
+
+16bits inst는 32-bit inst로 확장해서 issue할것임
+rvc 여부는 inst에서 확인할 수 있음
+InstHalfBuffer가 하나 존재 (16bits)
+fq의 deq.ready를 만들어줌
+
+IF_PC(1) === 1 -> lsb 16bit은 invalid. IF_PC(1) === 0 -> lsb 16bit은 valid
+
+1 cycle
+* 32는 그냥 issue -> (inst(0,1) === b11 && (PC(1) === 0)), deq.ready := 1
+
+아래는 전부 PC(1) === 0인지 1인지 확인해야함, 2 cycle마다 버퍼가 빔
+* 16/16은 lsb부터 하나씩. -> (inst(0,1) =/= b11 && inst(16,17) =/= b11)
+PC(1) === 0이면 lsb 16 expand하고 issue, deq.ready := 1, msb 16 버퍼에 저장. 
+PC(1) === 1이면 msb 16 expand하고 issue, deq.ready := 1
+
+* 32(0)/16은 16 issue 후 32(0)을 저장 -> (inst(0,1) =/= b11 && inst(16,17) === b11)
+32(0) 버퍼에 저장 후 prevInstInvalid flag set
+PC(1) === 0이면 lsb 16 expand 하고 issue, deq.ready := 1
+PC(1) === 1이면 issue하지 않음. deq.ready := 1
+
+* 16/32(1)은 기존 32(0)과 합쳐서 issue. 이후 16 issue -> 기존에 32(0)이 남아있는 경우 (prevInstInvalid set)여야 함!
+PC(1) === 0이면 PC가 잘못된거임.
+PC(1) === 1인 경우만 있어야 함 -> 기존 32(0)과 32(1)을 합쳐서 issue, deq.ready := 0/ 이후 16 expand하고 issue, deq.ready := 1, prevInstInvalid clear
+
+* 32(0)/32(1)은 기존 32(0)과 합쳐서 issue. 이후 32(0)을 저장 -> 기존에 32(0)이 남아있는 경우 (prevInstInvalid set)여야 함!
+PC(1) === 0이면 PC가 잘못된거임.
+PC(1) === 1인 경우만 있어야 함 -> 기존 32(0)과 32(1)을 합쳐서 issue, deq.ready := 0/ 이후 16 expand하고 issue, deq.ready := 1
+
+///
+rocket은 frontend에서 확인해서 mask로 알려주는듯 (s2_partial_insn_valid)
+icache에 valid날리는 때: 
+cpu req가 valid이거나 fq가 공간이 있을때
+///
