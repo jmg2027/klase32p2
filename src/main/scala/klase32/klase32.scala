@@ -109,20 +109,26 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     (ctrlSig.illegal === IllegalInstIE.illegal, Causes.illegal_instruction.U),
     (ctrlSig.ecall === EcallIE.EN, Causes.machine_ecall.U),
     (ctrlSig.ebreak === EbreakIE.EN, Causes.breakpoint.U),
-  ))
 
-  // Exception pipeline
-  val ieXcptReg = RegEnable(ieXcpt, !stallME)
-  val ieCauseReg = RegEnable(ieCause, !stallME)
-
-  // FIXME: Until cache
-  val (meXcpt, meCause): (Bool, UInt)= checkExceptions(List(
-    (ieXcptReg, ieCauseReg),
+    // CHECK: No need to pipeline for load exception...
     (lsu.io.ldXcpt.ma, Causes.misaligned_load.U),
     (lsu.io.ldXcpt.pf, Causes.load_page_fault.U),
     (lsu.io.ldXcpt.gf, Causes.load_guest_page_fault.U),
     (lsu.io.ldXcpt.ae, Causes.load_access.U),
   ))
+//
+//  // Exception pipeline
+//  val ieXcptReg = RegEnable(ieXcpt, !stallME)
+//  val ieCauseReg = RegEnable(ieCause, !stallME)
+//
+//  // FIXME: Until cache
+//  val (meXcpt, meCause): (Bool, UInt)= checkExceptions(List(
+//    (ieXcptReg, ieCauseReg),
+//    (lsu.io.ldXcpt.ma, Causes.misaligned_load.U),
+//    (lsu.io.ldXcpt.pf, Causes.load_page_fault.U),
+//    (lsu.io.ldXcpt.gf, Causes.load_guest_page_fault.U),
+//    (lsu.io.ldXcpt.ae, Causes.load_access.U),
+//  ))
 
 
   // Fetch & Issue
@@ -136,6 +142,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   frontend.io.flushFetchQueue := flushSig ; dontTouch(frontend.io.flushFetchQueue)
 
   frontend.io.divBusy := DontCare
+  frontend.io.wfi := csr.io.wfiOut
 
   frontend.io.evec := csr.io.evec
   frontend.io.cnd := alu.io.F
@@ -179,8 +186,8 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   reg.io.wp(0).bits.data := Mux1H(Seq(
     RdType.Alu -> alu.io.R,
-//    RdType.ConsecPC -> (frontend.io.if_pc + 4.U),
-//    RdType.ConsecPC -> (frontend.io.if_pc),
+    //    RdType.ConsecPC -> (frontend.io.if_pc + 4.U),
+    //    RdType.ConsecPC -> (frontend.io.if_pc),
     RdType.ConsecPC -> (frontend.io.ie_pc + 4.U),
     RdType.BypassCSR -> csr.io.rd
   ).map {case(k, v) => (k === ctrlSig.rdType, v)})
@@ -225,8 +232,10 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   csr.io.wfi := ctrlSig.wfi
 
   // FIXME: When speculative load/store supported, exception should be failed load/store pc
-  csr.io.exception := meXcpt
-  csr.io.cause := meCause
+//  csr.io.exception := meXcpt
+//  csr.io.cause := meCause
+  csr.io.exception := ieXcpt
+  csr.io.cause := ieCause
   csr.io.epc := me_pc
   csr.io.loadAddr := me_aluR
 
