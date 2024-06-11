@@ -17,6 +17,7 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
 
   val divBusy = Input(Bool())
   val stall = Input(Bool())
+  val wfi = Input(Bool())
 
   val aluR = Input(UInt(mxLen.W))
   val ie_pc = Input(UInt(mxLen.W))
@@ -87,7 +88,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // To extend to compressed mode, fetch queue should handle 16-bit data
   // when empty, enq data will be dequeued instantly
   // FIXME: Check for flow in jump
-//   val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = true, hasFlush = true))
+  //   val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = true, hasFlush = true))
   val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = false, hasFlush = true))
 
   // Fetch
@@ -105,59 +106,50 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   // When exception happens, only 1 request can go out
   val xcptReqOntheway = RegInit(false.B)
-  when (io.exception && !regBooting) {
+  when (io.epm.req && io.exception && !regBooting) {
     xcptReqOntheway := true.B
   }
   when(io.epm.ack && xcptReqOntheway) {
-      xcptReqOntheway := false.B
+    xcptReqOntheway := false.B
   }
 
   // Flush fetch queue
-  fq.flush := io.flushFetchQueue.ie.xcpt || 
-  io.flushFetchQueue.ie.jump || 
-  io.flushFetchQueue.ie.eret || 
-  io.flushFetchQueue.ie.csr
+  fq.flush := io.flushFetchQueue.ie.xcpt ||
+    io.flushFetchQueue.ie.jump ||
+    io.flushFetchQueue.ie.eret ||
+    io.flushFetchQueue.ie.csr
   // Fence does not flush fetch queue
   // fq.flush := io.flushFetchQueue.orR
 
-  val fetch = fetchAvail && !regBooting && !xcptReqOntheway
+  val fetch = fetchAvail && !regBooting && !xcptReqOntheway && !io.wfi
   val fetchPC = Reg(UInt(mxLen.W))
+
   printf(cf"[FE] exception: ${io.exception}\n")
-  printf(cf"[FE] evec: ${io.evec}\n")
+  printf(cf"[FE] evec: ${io.evec}%x\n")
   when(regBooting) {
-//    fetch := false.B
     fetchPC := bootAddrWire
-    // fq.flush := false.B
   }.elsewhen(io.exception || io.eret) {
-//    fetch := fq.io.enq.ready
-//    fetch := true.B
     fetchPC := io.evec
-    // fq.flush := true.B
   }.elsewhen(jump) {
-//    fetch := fq.io.enq.ready
-//    fetch := true.B
     fetchPC := jumpPC
-    // fq.flush := true.B
   }.elsewhen(io.flushFetchQueue.ie.csr.orR) {
     fetchPC := io.ie_pc + 4.U
   }.elsewhen(fetch) {
     fetchPC := fetchPC + 4.U
-    // fq.flush := false.B
   }.otherwise {
     fetchPC := fetchPC
-    // fq.flush := false.B
   }
-//}.elsewhen(!fetch) {
-////    fetch := false.B
-//    fetchPC := fetchPC
-//    fq.flush := false.B
-//    // FIXME: Does this not needed?
-//  }.otherwise {
-////    fetch := fq.io.enq.ready
-////    fetch := true.B
-//    fetchPC := fetchPC + 4.U
-//    fq.flush := false.B
-//  }
+  //}.elsewhen(!fetch) {
+  ////    fetch := false.B
+  //    fetchPC := fetchPC
+  //    fq.flush := false.B
+  //    // FIXME: Does this not needed?
+  //  }.otherwise {
+  ////    fetch := fq.io.enq.ready
+  ////    fetch := true.B
+  //    fetchPC := fetchPC + 4.U
+  //    fq.flush := false.B
+  //  }
 
   // When flush, ignore acks for on-the-fly reqs
   // All requests recieve ack so overflow should not happen
@@ -166,7 +158,24 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // For exception(async exception), only 1 request will comes out
   val reqCounter = RegInit(0.U(log2Ceil(fetchqueueEntries * 2 - 1).W))
   val ignoreAck = RegInit(false.B)
-  when(fq.flush) {
+//  val ignoreAckWire = RegInit(false.B)
+//  when(io.epm.req && io.epm.ack) {
+//    reqCounter := reqCounter
+//  }.elsewhen(io.epm.req) {
+//    reqCounter := reqCounter + 1.U
+//  }.elsewhen(io.epm.ack) {
+//    reqCounter := reqCounter - 1.U
+//  }
+//
+//  ignoreAckWire := fq.flush && ignoreAck
+//  when(fq.flush) {
+//    ignoreAck := ignoreAckWire
+//  }.elsewhen(ignoreAck) {
+//    ignoreAck := reqCounter =/= 1.U
+//  }
+
+
+  when(fq.flush && !xcptReqOntheway) {
     reqCounter := reqCounter + (fetchqueueEntries - 1).U - fqCounter
     ignoreAck := true.B
   }
@@ -175,7 +184,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
     reqCounter := reqCounter - 1.U
   }
 
-//  when(reqCounter === 0.U && ignoreAck) {
+  //  when(reqCounter === 0.U && ignoreAck) {
   when(reqCounter === 1.U && ignoreAck && io.epm.ack) {
     ignoreAck := false.B
   }
@@ -191,7 +200,8 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   fq.io.enq.bits.data := io.epm.data
   fq.io.enq.bits.xcpt := io.epm.xcpt
-  fq.io.enq.valid := io.epm.ack && !ignoreAck // Suppose simultaneous ack and data response
+//  fq.io.enq.valid := io.epm.ack && !ignoreAck && fetchAvail// Suppose simultaneous ack and data response
+  fq.io.enq.valid := io.epm.ack && !ignoreAck && fetchAvail// Suppose simultaneous ack and data response
 
 
   // Why this generates nullpointerexception?
@@ -203,40 +213,50 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   Fetch queue will fetch fetchwidth. fetchqueue should store 2 bytes align
   Extended instruction will be issued: 32 bits
    */
-  val instrAvail = fq.io.deq.valid && !regBooting && !ignoreAck
-  //  val instrAvail = fq.io.deq.fire && !regBooting
+//  val instrAvail = fq.io.deq.valid && !regBooting && !ignoreAckWire && !ignoreAck
+  val instrAvail = fq.io.deq.valid && !regBooting
   // When fq being flushed, NOP is issued(1 cycle stall)
-  val issue = instrAvail && issueable
+  val issue = instrAvail && issueable && !ignoreAck
 
   val instIF = fq.io.deq.bits.data
   val xcptIF = fq.io.deq.bits.xcpt
 
 
-  val pcWrite = Wire(UInt())
+//  val pcWrite = Wire(UInt())
+//  val pcWrite = RegInit(bootAddrWire)
 
   // PC Register
   // Address of current instruction in IF stage
   // val pcReg = RegEnable(pcWrite, bootAddrWire, (jump || issue) && !io.stall)
-  val pcReg = RegEnable(pcWrite, bootAddrWire, !io.stall && fetch)
+//  val nextPC = RegInit(bootAddrWire)
+//  val pcReg = RegEnable(nextPC, bootAddrWire, issue)
+  val pcReg = RegInit(bootAddrWire)
   io.if_pc := pcReg
-   printf(cf"[FE] pc: 0x$pcReg%x\n")
-   printf(cf"pcw: 0x$pcWrite%x\n")
+  printf(cf"[FE] pc: 0x$pcReg%x\n")
   // printf(cf"[FE] jump: $jump\n")
   // printf(cf"[FE] issue: $issue\n")
   // printf(cf"boot: $regBooting\n")
   // printf(cf"fq: ${fq.io.deq.valid}\n")
   // printf(cf"stall: ${io.stall}\n")
 
+
+
+  when(issue && !io.stall) {
+    when(io.exception || io.eret) {
+      pcReg := io.evec
+    }.elsewhen(jump) {
+      pcReg := jumpPC
+    }.elsewhen(io.flushFetchQueue.ie.csr.orR) {
+      pcReg := io.ie_pc + 4.U
+    }.otherwise {
+      pcReg := pcReg + 4.U
+    }
+  }
   // pcWrite := Mux(jump, jumpPC, pcReg + 4.U)
-  pcWrite := Mux(fq.flush, fetchPC, pcReg + 4.U)
-
-
+//  pcWrite := Mux(fq.flush, fetchPC, pcReg + 4.U)
 
   // Issue
   fq.io.deq.ready := !io.stall // issue signal will block when stalled
-  //  fq.io.deq.ready := true.B
-  //  io.instPacket.inst := Mux(issue, instIF, 0.U)
-  //  io.instPacket.xcpt := Mux(issue, xcptIF, 0.U.asTypeOf(new HeartXcpt))
   io.instPacket.inst := instIF
   io.instPacket.xcpt := xcptIF
   io.issue := issue
