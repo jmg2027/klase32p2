@@ -344,7 +344,7 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
   val wdata = Mux1H(Seq(
     (io.ctrl.inst === RW) -> io.ctrl.in,
     (io.ctrl.inst === RS) -> (io.ctrl.in | io.rd),
-    (io.ctrl.inst === RC) -> (io.ctrl.in & (~io.rd).asUInt),
+    (io.ctrl.inst === RC) -> ((io.ctrl.in | io.rd) & (~io.ctrl.in).asUInt),
   ))
 
   when (wen) {
@@ -405,15 +405,14 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
   val exception = io.ecall.asUInt.orR || io.ebreak.asUInt.orR || io.exception
 
   // When interrupt jump to interrupt vector
-  io.evec := Mux(csr.mtvec.reg.mode === 0.U, csr.mtvec.reg.base, csr.mtvec.reg.base + (io.cause << 2))
+  io.evec := 0.U
   val tval = Mux(io.ebreak.asUInt.orR, io.epc, io.loadAddr)
   when (exception) {
     csr.mepc.write(io.epc)
     csr.mcause.write(io.cause)
     csr.mtval.write(tval)
-  }
-
-  when (io.mret.asUInt.orR || exception) {
+    io.evec := Mux(csr.mtvec.reg.mode === 0.U, csr.mtvec.reg.base << 2.U, (csr.mtvec.reg.base << 2.U) + (io.cause << 2.U))
+  }.elsewhen (io.mret.asUInt.orR) {
     csr.mepc.read(io.evec)
   }
 
@@ -437,7 +436,7 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
   when (io.wfi.asUInt.orR) {
     wfi := true.B
   }
-  when (mInterruptPending) {
+  when (mInterruptPending || exception) {
     wfi := false.B
   }
   io.wfiOut := wfi
