@@ -61,3 +61,26 @@ rocket은 frontend에서 확인해서 mask로 알려주는듯 (s2_partial_insn_v
 icache에 valid날리는 때: 
 cpu req가 valid이거나 fq가 공간이 있을때
 ///
+
+아니면
+32bit 들어오면
+PC가 2인지 4인지 보고
+RVC인지 보고
+PC가 2이고 RVC면 Half low 보내고
+PC가 2인데 RVC가 아니면 전의 Half high를 붙여서 보내고
+PC가 4인데 RVC면 Half low를 보내고 Half high를 저장
+
+일단
+32bit이 들어와
+PC가 2인지 4인지 보고
+PC가 2면 RVC확인
+PC가 4면 RVC확인
+32/16이 들어와서
+buf가 valid가 찍혔는데
+jump가 찍혔어
+그럼 buf가 clear되고
+새로 32bit이 들어올텐데
+(걔가 16/16이거나 16/32(1), PC가 2임)
+PC가 2인지 4인지 보고
+PC가 2면 RVC확인해서 HIGH보내거나 저장하고
+PC가 4면 RVC확인해서 보내고 저장하거나 말거나 하고
