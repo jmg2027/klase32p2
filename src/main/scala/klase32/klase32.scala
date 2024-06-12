@@ -71,7 +71,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   // Pipeline
   //  val ie_inst = RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall && frontend.io.issue)
-  val ie_inst = withReset(flush) {RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall)}
+  val ie_inst = withReset(flush) {RegEnable(frontend.io.instPacket.bits.data, bitPatToUInt(NOP), !stall)}
   val ie_pc = withReset(flush) {RegEnable(frontend.io.if_pc, !stall)}
 
   printf(cf"===============================New Cycle===============================\n")
@@ -97,10 +97,10 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // Exception
   val (ieXcpt, ieCause): (Bool, UInt)  = checkExceptions(List(
     (csr.io.interruptPending, csr.io.interruptCause),
-    (frontend.io.instPacket.xcpt.ma, Causes.misaligned_fetch.U),
-    (frontend.io.instPacket.xcpt.pf, Causes.fetch_page_fault.U),
-    (frontend.io.instPacket.xcpt.gf, Causes.fetch_guest_page_fault.U),
-    (frontend.io.instPacket.xcpt.ae, Causes.fetch_access.U),
+    (frontend.io.instPacket.bits.xcpt.ma, Causes.misaligned_fetch.U),
+    (frontend.io.instPacket.bits.xcpt.pf, Causes.fetch_page_fault.U),
+    (frontend.io.instPacket.bits.xcpt.gf, Causes.fetch_guest_page_fault.U),
+    (frontend.io.instPacket.bits.xcpt.ae, Causes.fetch_access.U),
 
     (lsu.io.stXcpt.ma, Causes.misaligned_store.U),
     (lsu.io.stXcpt.pf, Causes.store_page_fault.U),
