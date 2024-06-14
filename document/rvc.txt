@@ -1,0 +1,62 @@
+테스트 시나리오
+1. 디코드를 제대로 하는지
+2. 들어간 32bit 패킷의 rvc/rvi 구성에 따라 잘 내보내는지
+
+rvi가 들어가면 rvi inst가 그대로 나오고 output valid
+rvc1rvc0가 들어가면 pc(1)에 따라 rvc1이 나오든 rvc0이 나오든 하고, 그 다음 사이클에 rvc1이 나오도록 함
+-> fq에서 오는건 막고 issue는 시키고
+
+state: 32, 16/16/pc(1)0, 16/16/pc(1)1, 32(0)/16/pc(1)0, 32(0)/16/pc(1)1, 16/32(1), 32(0)/32(1)
+
+1. PC(1) === 0 인 경우
+32 -> buf: invalid, issue full, next pc: +4, deq: ready, next state: 32
+16/16 -> buf: valid, buf: rvc, issue inst(0,15), next pc: +2, deq: not ready, next state: x/16 && PC(1) === 1
+32(0)/16 -> buf: valid, buf: not rvc, issue inst(0,15), next pc: +2, deq: ready, next state: x/32(1)
+16/32(1) -> invalid
+32(0)/32(1) -> invalid
+
+2. PC(1) === 1 인 경우
+32 -> invalid
+16/16 -> buf: invalid, issue inst(16,31), next pc: +2, deq: ready, next state: PC(1) === 0
+32(0)/16 -> buf: valid, buf: not rvc, no issue, next pc: +2, deq: ready
+16/32(1) -> buf: valid, buf: rvc, issue (inst(0,15), buf), next pc: +4, deq: ready
+32(0)/32(1) -> buf: valid, buf: not rvc, issue (inst(0,15), buf), next pc: +4, deq: ready
+
+PC값은
+연속된 issue인 경우
+rvc모듈에서 주는대로 증가하고 rvc 모듈에서 나가는 inst의 pc
+
+deq 조건
+rvc에서 deq block 하지 않거나 stall이 아니면 ready
+stall이 아니어도 deq block이면 주지 말것
+deq block은 
+
+
+when valid, buf = inst(16,31)
+
+
+fq.deq.fire이면 새로운 entry가 들어온 것
+inst issue하는 경우: buffer에 16이 있거나 
+issue 안하는 경우: 
+pc(1) === 0이면
+inst(0,1) 보고 32면 보냄
+16이면 보내고 flag, fqDeqReady 막음
+
+pc(1) === 1이면
+
+16이거나 32이거나 니까
+16이면 
+
+그렇게 생각하면 사실
+fetchByte에 따라서 (4의 배수)
+각 2Byte마다 검사하고 maybeRVC로 flag세우고
+16/3/2/3/2/16/16/16/16 mask만들고
+101011111 이렇게
+
+아 그럼 어차피 32bit 여러개를 decoder에 뿌려야 하니까 32bit buffer가 있는게 맞는거같은데
+
+prevInstInvalid: 
+
+그러면
+rvc에는 한번에 32씩 뿌리게 해놓고
+fq에서 
