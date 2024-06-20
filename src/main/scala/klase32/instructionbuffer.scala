@@ -36,10 +36,9 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
   val instBufDataSlice = Wire(VecInit(Seq.fill(numMask)(0.U(16.W))))
 
   instBufDataSlice.zipWithIndex.foreach {
-    case (slice, i) => slice := instBuf.bits.data(16*(i+1)-1, 16*i)
-  }
-  instBufDataSlice.zipWithIndex.foreach {
-    case (slice, i) => instBufDataSliceIsRVC(i) := slice(1,0) =/= 3.U
+    case (slice, i) =>
+      slice := instBuf.bits.data(16*(i+1)-1, 16*i)
+      instBufDataSliceIsRVC(i) := slice(1,0) =/= 3.U
   }
   for (i <- 0 until numMask) {
     when(instBufDataSliceIsRVC(i) === false.B) {
