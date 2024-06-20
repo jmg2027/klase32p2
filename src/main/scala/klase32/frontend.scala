@@ -47,7 +47,8 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   val io = IO(new FrontendIO())
 
-  io.epm.kill := DontCare
+  // When kill asserts, all previous requests are blown away
+  io.epm.kill := fq.flush
 
   val brCond = (io.ctrl === BR) & io.cnd
   val haltCond = (io.ctrl === HALT)
@@ -83,16 +84,15 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val brAddr = io.ie_pc + io.brOffset
   val jumpPC = Mux(brIE, brAddr, io.aluR)
 
+  // Fetch
   // Fetch Queue
   // FIXME: Support for C extension
   // For now 32-bit N entries
   // To extend to compressed mode, fetch queue should handle 16-bit data
   // when empty, enq data will be dequeued instantly
   // FIXME: Check for flow in jump
-  //   val fq = Module(new Queue(new InstructionPacket, fetchqueueEntries, flow = true, hasFlush = true))
-  val fq = Module(new Queue(new InstructionPacket, fetchqueueEntries, flow = false, hasFlush = true))
+  val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = false, hasFlush = true))
 
-  // Fetch
   // Fetch counter
   val fqCounter = withReset(reset.asBool || fq.flush) { RegInit((fetchqueueEntries - 1).U) }
 
@@ -204,10 +204,6 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 //  fq.io.enq.valid := io.epm.ack && !ignoreAck && fetchAvail// Suppose simultaneous ack and data response
   fq.io.enq.valid := io.epm.ack && !ignoreAck && fetchAvail// Suppose simultaneous ack and data response
 
-
-  // Why this generates nullpointerexception?
-  //  def isRVC(inst: UInt): Bool = !(inst(1) && inst(0))
-
   // Issue
   val issueable = !io.divBusy
   /* FIXME: RVC
@@ -260,6 +256,9 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   fq.io.deq.ready := !io.stall // issue signal will block when stalled
   io.instPacket <> fq.io.deq
   io.issue := issue
+
+  // Instruction buffer
+  val instBuf = Module(new InstructionBuffer())
 
   // RVC
   val rvc = withReset(reset.asBool || fq.flush) { Module(new RVC()) }
