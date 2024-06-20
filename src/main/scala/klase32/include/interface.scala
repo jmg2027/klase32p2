@@ -12,7 +12,7 @@ object Acc {
  class Request(implicit p: Parameters) extends Bundle {
   val k = p(KLASE32ParamKey)
 
-  val addr = UInt(k.addrWidth.W)
+  val addr = UInt(k.vaddrBits.W)
   val id = UInt(k.accidWidth.W)
   val op = UInt(32.W)
   val argA = UInt(k.accdataWidth.W)
@@ -126,23 +126,30 @@ class EpmIntf(implicit p: Parameters) extends CoreBundle {
 
  val cmd = Output(UInt(5.W))
  val req = Output(Bool())
- val addr = Output(UInt(k.addrWidth.W))
+ val addr = Output(UInt(k.vaddrBits.W))
  val gnt = Input(Bool())
 
  val ack = Input(Bool())
- val bootAddr = Input(UInt(k.addrWidth.W))
+ val bootAddr = Input(UInt(k.vaddrBits.W))
 
  val kill = Output(Bool())
  val flush = Output(Bool())
 
- val data = Input(UInt(k.fetchWidth.W))
+ val data = Input(UInt(k.fetchBits.W))
  val xcpt = Input(new HeartXcpt)
 }
 
 class InstructionPacket(implicit p: Parameters) extends CoreBundle {
  val k = p(KLASE32ParamKey)
 
- val data = UInt(k.fetchWidth.W)
+ val data = UInt(issueBits.W)
+ val xcpt = new HeartXcpt
+}
+
+class FetchQueueEntry(implicit p: Parameters) extends CoreBundle {
+ val k = p(KLASE32ParamKey)
+
+ val data = UInt(k.fetchBits.W)
  val xcpt = new HeartXcpt
 }
 
@@ -150,7 +157,7 @@ class InstructionPacket(implicit p: Parameters) extends CoreBundle {
 class StoreBufferEntry(implicit p: Parameters) extends CoreBundle {
  val k = p(KLASE32ParamKey)
 
- // val addr = UInt(k.addrWidth.W)
+ // val addr = UInt(k.vaddrBits.W)
  // val data = UInt(xLen.W)
  // val mask = UInt((wordsize/8).W)
  val valid = Bool()
@@ -166,7 +173,7 @@ class EdmIntf(implicit p: Parameters) extends CoreBundle {
  val xcpt = Input(new HeartXcpt) // with dm_ld_ack
 
  val ld_req = Output(Bool()) // load or check write permission
- val ld_vaddr = Output(UInt(k.addrWidth.W)) // REMARK::THIS IS VADDR
+ val ld_vaddr = Output(UInt(k.vaddrBits.W)) // REMARK::THIS IS VADDR
  val ld_gnt = Input(Bool())
 
  val ld_ack = Input(Bool())
@@ -177,7 +184,7 @@ class EdmIntf(implicit p: Parameters) extends CoreBundle {
  val ld_mmio_kill = Output(Bool())
 
  val st_req = Output(Bool()) // committed store request
- val st_paddr = Output(UInt(k.addrWidth.W)) // REMARK::THIS IS PADDR
+ val st_paddr = Output(UInt(k.vaddrBits.W)) // REMARK::THIS IS PADDR
  val st_wdata = Output(UInt(k.dataWidth.W)) // this can be used for AMO with dm_ld_req
  val st_mask = Output(UInt(maskBits.W))
  val st_mmio = Output(Bool()) // with dm_ld_req
@@ -185,8 +192,8 @@ class EdmIntf(implicit p: Parameters) extends CoreBundle {
  val st_ack = Input(Bool())
 
  val resp_cmd = Input(UInt(5.W)) // for debugging using vcore
- val resp_vaddr = Input(UInt(k.addrWidth.W))
- val resp_paddr = Input(UInt(k.addrWidth.W))
+ val resp_vaddr = Input(UInt(k.vaddrBits.W))
+ val resp_paddr = Input(UInt(k.vaddrBits.W))
 }
 
 
