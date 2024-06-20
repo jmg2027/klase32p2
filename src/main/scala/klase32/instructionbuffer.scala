@@ -12,6 +12,8 @@ class InstructionBufferIO(implicit p: Parameters) extends CoreBundle with HasCor
   val stall = Input(Bool())
   val wfi = Input(Bool())
 
+  val isRVC = Output(Bool())
+
   val issue = Output(Bool())
 
   val fetchQueueTail = Flipped(Decoupled(new FetchQueueEntry()))
@@ -27,17 +29,44 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
 
   val instBuf = RegInit(0.U.asTypeOf(io.fetchQueueTail))
   val instBufEmpty = WireDefault(true.B)
-  val bufMaskIsRVC = WireDefault(0.U(numMask.W))
-  val bufMaskIndex = io.if_pc(log2Ceil(numMask) + 1, 1)
-  val prevMSB16IsRVI = WireDefault(false.B)
-  val instBufDataSlice = VecInit(instBuf.bits.data.
+  val instBufDataSliceIsRVC = WireDefault(0.U(numMask.W))
+  val instBufDataSliceValid = WireDefault(0.U(numMask.W))
+  val instBufDataSliceIndex = io.if_pc(log2Ceil(numMask) + 1, 1)
+  val prevInstNotFinished = WireDefault(false.B)
+  val instBufDataSlice = Wire(VecInit(Seq.fill(numMask)(0.U(16.W))))
+
+  instBufDataSlice.zipWithIndex.foreach {
+    case (slice, i) => slice := instBuf.bits.data(16*(i+1)-1, 16*i)
+  }
+  instBufDataSlice.zipWithIndex.foreach {
+    case (slice, i) => instBufDataSliceIsRVC(i) := slice(1,0) =/= 3.U
+  }
+  for (i <- 0 until numMask) {
+    when(instBufDataSliceIsRVC(i) === false.B) {
+      instBufDataSliceValid(i+1) === false.B
+      instBufDataSliceValid(i) === true.B
+    }.otherwise {
+      instBufDataSliceValid(i) === true.B
+    }
+  }
+
+  io.isRVC := instBufDataSliceIsRVC(instBufDataSliceIndex)
 
   // fetch new entry from fetch queue when core consumed all instructions or pc is out of range
   io.fetchQueueTail.ready := instBufEmpty
 
+  // Enqueue
   when(io.fetchQueueTail.fire) {
     instBuf := io.fetchQueueTail.bits
     instBufEmpty := false.B
   }
+
+  // Dequeue
+  when(io.instPacket.fire) {
+    io.instPacket.bits.data := instBufDataSlice(instBufDataSliceIndex)
+    io.instPacket.bits.xcpt := instBuf.bits.xcpt
+  }
+
+  // Check current instruction slice by PC
 
 }
