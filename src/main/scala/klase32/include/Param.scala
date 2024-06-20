@@ -45,16 +45,19 @@ object param {
 
                                addressAlignByte: Int = 4,
 
+                               issueWidth: Int = 1
                              )
   case class KlasE32Param(
-                           addrWidth: Int = 32,
+                           vaddrBits: Int = 32,
+                           paddrBits: Int = 32,
                            dataWidth: Int = 32,
-                           fetchWidth: Int = 32,
+                           fetchWidth: Int = 1,
                            accdataWidth: Int = 32,
                            accidWidth: Int = 32,
                            tbminterfacenum: Int = 4,
                            core: KlasE32CoreParam = KlasE32CoreParam(),
                          ) {
+    val fetchBits: Int = fetchWidth * 32
     def dataAlign = log2Ceil(dataWidth/8)
   }
 
@@ -105,6 +108,9 @@ trait HasCoreParameters {
   def hartIDWidth = coreParams.hartIDWidth
 
   def addressAlignByte = coreParams.addressAlignByte
+
+  def issueWidth = coreParams.issueWidth
+  def issueBits = issueWidth * 32
 }
 
 abstract class CoreModule(implicit val p: Parameters) extends Module with HasCoreParameters
