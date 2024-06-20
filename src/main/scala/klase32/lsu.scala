@@ -20,7 +20,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
 
     val edm = new EdmIntf()
 
-    val addr = Input(UInt(k.addrWidth.W))
+    val addr = Input(UInt(k.vaddrBits.W))
     val rddata = Output(UInt(k.dataWidth.W))
     val wrdata = Input(UInt(k.dataWidth.W))
 
@@ -37,7 +37,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   }
   )
   // Align address
-  val addrAligned = Cat(io.addr(k.addrWidth - 1, log2Ceil(addressAlignByte)), 0.U(log2Ceil(addressAlignByte).W))
+  val addrAligned = Cat(io.addr(k.vaddrBits - 1, log2Ceil(addressAlignByte)), 0.U(log2Ceil(addressAlignByte).W))
   val offsetAligned = io.addr(log2Ceil(addressAlignByte) - 1, 0)
 
   // Align store data: shift the write data based on the address offset and create a mask for the store operation
