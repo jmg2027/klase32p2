@@ -30,7 +30,6 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
   val instBuf = RegInit(0.U.asTypeOf(io.fetchQueueTail))
   val instBufEmpty = WireDefault(true.B)
   val instBufDataSliceIsRVC = WireDefault(0.U(numMask.W))
-  val instBufDataSliceValid = WireDefault(0.U(numMask.W))
   val instBufDataSliceIndex = io.if_pc(log2Ceil(numMask) + 1, 1)
   val prevInstNotFinished = WireDefault(false.B)
   val instBufDataSlice = Wire(VecInit(Seq.fill(numMask)(0.U(16.W))))
@@ -39,14 +38,6 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
     case (slice, i) =>
       slice := instBuf.bits.data(16*(i+1)-1, 16*i)
       instBufDataSliceIsRVC(i) := slice(1,0) =/= 3.U
-  }
-  for (i <- 0 until numMask) {
-    when(instBufDataSliceIsRVC(i) === false.B) {
-      instBufDataSliceValid(i+1) === false.B
-      instBufDataSliceValid(i) === true.B
-    }.otherwise {
-      instBufDataSliceValid(i) === true.B
-    }
   }
 
   io.isRVC := instBufDataSliceIsRVC(instBufDataSliceIndex)
@@ -62,8 +53,14 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
 
   // Dequeue
   when(io.instPacket.fire) {
-    io.instPacket.bits.data := instBufDataSlice(instBufDataSliceIndex)
     io.instPacket.bits.xcpt := instBuf.bits.xcpt
+    when(io.isRVC) {
+      io.instPacket.bits.data := instBufDataSlice(instBufDataSliceIndex)
+    }.elsewhen(instBufDataSliceIndex =/= (numMask.U - 1.U)) {
+      io.instPacket.bits.data := instBufDataSlice(instBufDataSliceIndex + 1.U) ## instBufDataSlice(instBufDataSliceIndex)
+    }.otherwise {
+      
+    }
   }
 
   // Check current instruction slice by PC
