@@ -6,6 +6,7 @@ import chisel3.experimental.BundleLiterals._
 import klase32.config._
 import klase32.param.KLASE32ParamKey
 
+import freechips.rocketchip.rocket.{RVCDecoder, ExpandedInstruction}
 
 class RVCIO(implicit p: Parameters) extends CoreBundle {
   val in = Flipped(Decoupled(new InstructionPacket()))
@@ -24,8 +25,8 @@ class RVC(implicit p: Parameters) extends CoreModule {
   val instHalfBuf = RegInit(Valid(0.U(16.W)))
   val itTakesTwoCycles = RegInit(false.B)
 
-  val inHalfHigh = io.in.bits.data(mxLen-1, mxLen/2)
-  val inHalfLow = io.in.bits.data(mxLen/2, 0)
+  val inHalfHigh = io.in.bits.data(wordsize-1, wordsize/2)
+  val inHalfLow = io.in.bits.data(wordsize/2, 0)
 
   // 32
   // 16/16
@@ -120,8 +121,15 @@ class RVC(implicit p: Parameters) extends CoreModule {
 }
 
 class RVCExpander(implicit p: Parameters) extends CoreModule {
-  val io = IO(new Bundle{
-    val in = UInt((mxLen/2).W)
-    val out = UInt(mxLen.W)
+  val io = IO(new Bundle {
+    val in = UInt(wordsize.W)
+    val out = UInt(wordsize.W)
   })
+
+    if (usingCompressed) {
+      io.out := new RVCDecoder(io.in, xLen = xLen, useAddiForMv = true).decode.bits
+    } else {
+      io.out := io.in
+    }
+
 }
