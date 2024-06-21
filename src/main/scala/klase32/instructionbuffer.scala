@@ -21,18 +21,23 @@ class InstructionBufferIO(implicit p: Parameters) extends CoreBundle with HasCor
 
 }
 
+// Use flush signal to reset
 class InstructionBuffer(implicit p: Parameters) extends CoreModule {
   val k = p(KLASE32ParamKey)
   val numMask = log2Ceil(k.fetchWidth/8)
 
   val io = IO(new InstructionBufferIO)
 
+  val rvc = Module(new RVCExpander())
+
   val instBuf = RegInit(0.U.asTypeOf(io.fetchQueueTail))
   val instBufEmpty = WireDefault(true.B)
   val instBufDataSliceIsRVC = WireDefault(0.U(numMask.W))
   val instBufDataSliceIndex = io.if_pc(log2Ceil(numMask) + 1, 1)
-  val prevInstNotFinished = WireDefault(false.B)
+//  val prevInstNotFinished = RegInit(false.B)
+  val prevInstNotFinished = !io.isRVC && (instBufDataSliceIndex === (numMask.U - 1.U))
   val instBufDataSlice = Wire(VecInit(Seq.fill(numMask)(0.U(16.W))))
+  val prevInstBuf = RegInit(0.U(16.W))
 
   instBufDataSlice.zipWithIndex.foreach {
     case (slice, i) =>
@@ -43,26 +48,33 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
   io.isRVC := instBufDataSliceIsRVC(instBufDataSliceIndex)
 
   // fetch new entry from fetch queue when core consumed all instructions or pc is out of range
-  io.fetchQueueTail.ready := instBufEmpty
+  instBufEmpty := (instBufDataSliceIndex === (numMask - 2).U && !io.isRVC) ||
+    (instBufDataSliceIndex === (numMask - 1).U && io.isRVC)
+
+  // FIXME: What should be the condition??
+  io.fetchQueueTail.ready := instBufEmpty && io.instPacket.fire
+  io.instPacket.valid := !instBufEmpty && !prevInstNotFinished
+
+  when(prevInstNotFinished) {
+    prevInstBuf := instBufDataSlice((numMask-1).U)
+  }
 
   // Enqueue
   when(io.fetchQueueTail.fire) {
     instBuf := io.fetchQueueTail.bits
-    instBufEmpty := false.B
   }
+
 
   // Dequeue
   when(io.instPacket.fire) {
     io.instPacket.bits.xcpt := instBuf.bits.xcpt
     when(io.isRVC) {
-      io.instPacket.bits.data := instBufDataSlice(instBufDataSliceIndex)
+      rvc.io.in := instBufDataSlice(instBufDataSliceIndex)
+      io.instPacket.bits.data := rvc.io.out
     }.elsewhen(instBufDataSliceIndex =/= (numMask.U - 1.U)) {
       io.instPacket.bits.data := instBufDataSlice(instBufDataSliceIndex + 1.U) ## instBufDataSlice(instBufDataSliceIndex)
     }.otherwise {
-      
+      io.instPacket.bits.data := instBufDataSlice(0) ## prevInstBuf
     }
   }
-
-  // Check current instruction slice by PC
-
 }
