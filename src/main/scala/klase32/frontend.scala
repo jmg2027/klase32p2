@@ -236,7 +236,8 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // printf(cf"fq: ${fq.io.deq.valid}\n")
   // printf(cf"stall: ${io.stall}\n")
 
-
+  val instBuf = withReset(reset.asBool || fq.flush) { Module(new InstructionBuffer()) }
+  val issueLength = Mux(instBuf.io.isRVC, 2.U, 4.U)
 
   when(issue && !io.stall) {
     when(io.exception || io.eret) {
@@ -246,7 +247,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
     }.elsewhen(io.flushFetchQueue.ie.csr.orR) {
       pcReg := io.ie_pc + 4.U // ie instruction's issue legnth!
     }.otherwise {
-      pcReg := pcReg + 4.U
+      pcReg := pcReg + issueLength
     }
   }
   // pcWrite := Mux(jump, jumpPC, pcReg + 4.U)
@@ -258,12 +259,10 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   io.issue := issue
 
   // Instruction buffer
-  val instBuf = Module(new InstructionBuffer())
 
-  // RVC
-  val rvc = withReset(reset.asBool || fq.flush) { Module(new RVC()) }
-  rvc.io.in <> fq.io.deq
-  io.instPacket <> rvc.io.out
-  rvc.io.pcIs4ByteAligned := !pcReg(1)
+  instBuf.io.fetchQueueTail <> fq.io.deq
+  io.instPacket <> instBuf.io.instPacket
+  instBuf.io.if_pc := pcReg
+
 
 }
