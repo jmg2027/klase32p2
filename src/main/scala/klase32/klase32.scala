@@ -31,7 +31,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   val alu = Module(new ALU)
   val lsu = Module(new LSU)
   //val div = Module(new DIV)
-  //val mpy = Module(new MPY)
+  val mpy = Module(new MPY)
   val frontend = Module(new Frontend)
   val csr = Module(new CSRModule)
   val hzd = Module(new Hazards)
