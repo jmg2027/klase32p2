@@ -35,13 +35,18 @@ object ALUControlIE extends ControlDefaultEnum {
 
 
 object DIVControlIE extends ControlDefaultEnum {
-  val DIVS = Value
+  val DIV = Value
   val DIVU = Value
-  val REMS = Value
+  val REM = Value
   val REMU = Value
 }
 
-object MPYControlIE extends ControlDefaultEnableEnum
+object MPYControlIE extends ControlDefaultEnum {
+  val MUL = Value
+  val MULH = Value
+  val MULHU = Value
+  val MULHSU = Value
+}
 
 object FrontendControlIE extends ControlDefaultEnum {
   val BR = Value
@@ -91,11 +96,5 @@ object EbreakIE extends ControlDefaultEnableEnum
 object MRetIE extends ControlDefaultEnableEnum
 
 object RS2NotALUBIE extends ControlDefaultEnableEnum
-
-object MpyMDMuxIE extends ControlDefaultEnum {
-  // default: MULHU(unsigned a, unsigned b)
-  val MULHSU = Value
-  val MUL_MULH = Value
-}
 
 object OCDSwbreakMuxIE extends ControlDefaultEnableEnum
