@@ -237,7 +237,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // printf(cf"stall: ${io.stall}\n")
 
   val instBuf = withReset(reset.asBool || fq.flush) { Module(new InstructionBuffer()) }
-  val issueLength = Mux(instBuf.io.isRVC, 2.U, 4.U)
+  val issueLength = Mux(instBuf.io.curInstIsRVC, 2.U, 4.U)
 
   when(issue && !io.stall) {
     when(io.exception || io.eret) {
