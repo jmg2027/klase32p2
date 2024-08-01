@@ -52,8 +52,8 @@ class Decoded(implicit p: Parameters) extends CoreBundle {
   // val flushTLB = Bool()
   val wfi = WFIIE()
 
-  // val divCtrl = DIVControlIE()
-  // val mpyCtrl = MpyMDMuxIE()
+  val divCtrl = DIVControlIE()
+  val mpyCtrl = MPYControlIE()
 }
 
 class DecoderIO(implicit p: Parameters) extends CoreBundle {
@@ -97,8 +97,8 @@ class Decoder(implicit p: Parameters) extends CoreModule {
     FlushICacheField -> d.flushICache,
     WFIField -> d.wfi,
 
-    // DIVField -> d.divCtrl,
-    // MPYMDField -> d.mpyCtrl,
+    DIVField -> d.divCtrl,
+    MPYField -> d.mpyCtrl,
   )
 
   val instTable =
