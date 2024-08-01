@@ -48,8 +48,8 @@ trait BoolDecodeFieldWithDefault[T <: DecodePattern] extends DecodeFieldWithDefa
 }
 
 abstract class InstEnumField(e: SnitchEnum) extends DecodeFieldWithDefault[InstPattern, EnumType] {
-//  override def default = BitPat(e.default.litOption.get.U(e.getWidth.W))
-   def default = BitPat(e.default.litOption.get.U(e.getWidth.W))
+  //  override def default = BitPat(e.default.litOption.get.U(e.getWidth.W))
+  def default = BitPat(e.default.litOption.get.U(e.getWidth.W))
   def typeChecker: (InstProperty => Boolean)
 
   override def chiselType: EnumType = e()
@@ -64,7 +64,7 @@ abstract class InstEnumField(e: SnitchEnum) extends DecodeFieldWithDefault[InstP
 }
 
 abstract class InstBoolField(_default: Bool = false.B) extends BoolDecodeFieldWithDefault[InstPattern] {
-   def default = BitPat(_default) // Every default value is 0
+  def default = BitPat(_default) // Every default value is 0
   def typeChecker: (InstProperty => Boolean)
 
   override def genTable(p: InstPattern) = {
@@ -279,7 +279,7 @@ case class AluCompProperty(alu: ALUControlIE.Type, a: OperandType.Type, b: Opera
 case class BranchCompProperty(alu: ALUControlIE.Type) extends InstProperty(
   AluCompProperty(alu, OperandType.Reg, OperandType.Reg) ++
     CtrlControlIEProperty(FrontendControlIE.BR)
-//    RS2NotALUBProperty(RS2NotALUBIE.EN)
+  //    RS2NotALUBProperty(RS2NotALUBIE.EN)
 )
 
 case class StoreCompProperty(lsSize: DataSize.Type) extends InstProperty(
@@ -302,15 +302,15 @@ case class JumpCompProperty(frontendControl: FrontendControlIE.Type) extends Ins
   AluProperty(ALUControlIE.ADD) ++
     OpCompProperty.tupled(
       {
-         frontendControl match {
+        frontendControl match {
           case FrontendControlIE.JAL => (OperandType.PC, OperandType.JImmediate)
           case FrontendControlIE.JALR => (OperandType.Reg, OperandType.IImmediate)
         }
       }
     ) ++
-  RdProperty(RdType.ConsecPC) ++
-  CtrlControlIEProperty(frontendControl) ++
-  W0WritebackProperty(W0WritebackIE.EN)
+    RdProperty(RdType.ConsecPC) ++
+    CtrlControlIEProperty(frontendControl) ++
+    W0WritebackProperty(W0WritebackIE.EN)
 )
 
 case class RetCompProperty(frontendControl: FrontendControlIE.Type) extends InstProperty(
@@ -350,20 +350,20 @@ object RV32IDecode extends InstDecode {
     new InstPattern(AUIPC, AluCompProperty(ALUControlIE.ADD, OperandType.PC, OperandType.UImmediate)),
 
     new InstPattern(JAL,
-//      AluProperty(ALUControlIE.ADD) ++
-//      OpCompProperty(OperandType.PC, OperandType.JImmediate) ++
-//      RdProperty(RdType.ConsecPC) ++
-//      CtrlControlIEProperty(FrontendControlIE.JAL) ++
-//      W0WritebackProperty(W0WritebackIE.EN)
+      //      AluProperty(ALUControlIE.ADD) ++
+      //      OpCompProperty(OperandType.PC, OperandType.JImmediate) ++
+      //      RdProperty(RdType.ConsecPC) ++
+      //      CtrlControlIEProperty(FrontendControlIE.JAL) ++
+      //      W0WritebackProperty(W0WritebackIE.EN)
       JumpCompProperty(FrontendControlIE.JAL)
     ),
 
     new InstPattern(JALR,
-//      AluProperty(ALUControlIE.ADD) ++
-//      OpCompProperty(OperandType.Reg, OperandType.IImmediate) ++
-//      RdProperty(RdType.ConsecPC) ++
-//      CtrlControlIEProperty(FrontendControlIE.JALR) ++
-//      W0WritebackProperty(W0WritebackIE.EN)
+      //      AluProperty(ALUControlIE.ADD) ++
+      //      OpCompProperty(OperandType.Reg, OperandType.IImmediate) ++
+      //      RdProperty(RdType.ConsecPC) ++
+      //      CtrlControlIEProperty(FrontendControlIE.JALR) ++
+      //      W0WritebackProperty(W0WritebackIE.EN)
       JumpCompProperty(FrontendControlIE.JALR)
     ),
 
@@ -386,44 +386,44 @@ object RV32IDecode extends InstDecode {
 
     new InstPattern(CSRRW,
       AluProperty(ALUControlIE.ADD) ++
-      OpCompProperty(OperandType.Reg, OperandType.None) ++
+        OpCompProperty(OperandType.Reg, OperandType.None) ++
         CSRControlProperty(CSRControl.RW) ++
-      W0WritebackProperty(W0WritebackIE.EN) ++
+        W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRWI,
       AluProperty(ALUControlIE.ADD) ++
-      OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
+        OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
         CSRControlProperty(CSRControl.RW) ++
-      W0WritebackProperty(W0WritebackIE.EN) ++
+        W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRS,
       AluProperty(ALUControlIE.ADD) ++
-      OpCompProperty(OperandType.Reg, OperandType.None) ++
+        OpCompProperty(OperandType.Reg, OperandType.None) ++
         CSRControlProperty(CSRControl.RS) ++
-      W0WritebackProperty(W0WritebackIE.EN) ++
+        W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRSI,
       AluProperty(ALUControlIE.ADD) ++
-      OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
+        OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
         CSRControlProperty(CSRControl.RS) ++
-      W0WritebackProperty(W0WritebackIE.EN) ++
+        W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRC,
       AluProperty(ALUControlIE.ADD) ++
-      OpCompProperty(OperandType.Reg, OperandType.None) ++
+        OpCompProperty(OperandType.Reg, OperandType.None) ++
         CSRControlProperty(CSRControl.RC) ++
-      W0WritebackProperty(W0WritebackIE.EN) ++
+        W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
     new InstPattern(CSRRCI,
       AluProperty(ALUControlIE.ADD) ++
-      OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
+        OpCompProperty(OperandType.CSRImmediate, OperandType.None) ++
         CSRControlProperty(CSRControl.RC) ++
-      W0WritebackProperty(W0WritebackIE.EN) ++
+        W0WritebackProperty(W0WritebackIE.EN) ++
         RdProperty(RdType.BypassCSR)
     ),
 
@@ -449,7 +449,7 @@ object RV32IDecode extends InstDecode {
 case class AmoCompProperty(amo: AMOType.Type) extends InstProperty(
   // AluCompProperty(ALUControlIE.BypassA, OperandType.Reg, OperandType.Reg) ++
   OpCompProperty(OperandType.Reg, OperandType.Reg) ++
-//    W1WritebackProperty(W1WritebackIE.EN) ++
+    //    W1WritebackProperty(W1WritebackIE.EN) ++
     UseRdProperty(true.B) ++
     LoadProperty(LoadControl.EN) ++
     SignedProperty(SignedControl.signed) ++
@@ -481,25 +481,52 @@ object RV32ADecode extends InstDecode {
 case class MulDivCompProperty() extends InstProperty(
   OpCompProperty(OperandType.Reg, OperandType.Reg) ++
     W0WritebackProperty(W0WritebackIE.EN) ++
+    UseRdProperty(true.B)
+//    AccValidProperty(true.B) ++
+//    AccUseRdProperty(true.B) ++
+//    AccAddrProperty(AccType.SharedMulDiv)
+)
+
+case class MPYProperty(op: MPYControlIE.Type) extends InstProperty(op)
+object MPYField extends InstEnumField(MPYControlIE) {
+  override def name = "mpy"
+
+  override def typeChecker: InstProperty => Boolean = _.isInstanceOf[MPYProperty]
+}
+
+case class MPYCtrlProperty(op: MPYControlIE.Type) extends InstProperty(
+  OpCompProperty(OperandType.Reg, OperandType.Reg) ++
+    W0WritebackProperty(W0WritebackIE.EN) ++
     UseRdProperty(true.B) ++
-    AccValidProperty(true.B) ++
-    AccUseRdProperty(true.B) ++
-    AccAddrProperty(AccType.SharedMulDiv)
+    MPYProperty(op)
+)
+
+case class DIVProperty(op: DIVControlIE.Type) extends InstProperty(op)
+object DIVField extends InstEnumField(DIVControlIE) {
+  override def name = "div"
+
+  override def typeChecker: InstProperty => Boolean = _.isInstanceOf[DIVProperty]
+}
+
+case class DIVCtrlProperty(op: DIVControlIE.Type) extends InstProperty(
+  OpCompProperty(OperandType.Reg, OperandType.Reg) ++
+    W0WritebackProperty(W0WritebackIE.EN) ++
+    UseRdProperty(true.B) ++
+    DIVProperty(op)
 )
 
 object RV32MDecode extends InstDecode {
+
   import klase32.Instructions._
 
   override val table = Seq(
-    MUL,
-    MULH,
-    MULHSU,
-    MULHU,
-    DIV,
-    DIVU,
-    REM,
-    REMU,
-  ).map {
-    new InstPattern(_, MulDivCompProperty())
-  }
+    new InstPattern(MUL, MPYCtrlProperty(MPYControlIE.MUL)),
+    new InstPattern(MULH, MPYCtrlProperty(MPYControlIE.MULH)),
+    new InstPattern(MULHSU, MPYCtrlProperty(MPYControlIE.MULHSU)),
+    new InstPattern(MULHU, MPYCtrlProperty(MPYControlIE.MULHU)),
+    new InstPattern(DIV, DIVCtrlProperty(DIVControlIE.DIV)),
+    new InstPattern(DIVU, DIVCtrlProperty(DIVControlIE.DIVU)),
+    new InstPattern(REM, DIVCtrlProperty(DIVControlIE.REM)),
+    new InstPattern(REMU, DIVCtrlProperty(DIVControlIE.REMU))
+  )
 }
