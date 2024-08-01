@@ -23,6 +23,8 @@ object param {
 
                                usingOuterBoodAddr: Boolean = false,
 
+                               mpyLatency: Int = 2,
+
                                bootAddr: BigInt = BigInt(0x80000000L),
 
                                mxLen: Int = 32,
@@ -111,6 +113,8 @@ trait HasCoreParameters {
 
   def issueWidth = coreParams.issueWidth
   def issueBits = issueWidth * 32
+  def mpyLatency = coreParams.mpyLatency
+
 }
 
 abstract class CoreModule(implicit val p: Parameters) extends Module with HasCoreParameters
