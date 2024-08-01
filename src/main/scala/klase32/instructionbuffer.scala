@@ -12,7 +12,7 @@ class InstructionBufferIO(implicit p: Parameters) extends CoreBundle with HasCor
   val stall = Input(Bool())
   val wfi = Input(Bool())
 
-  val isRVC = Output(Bool())
+  val curInstIsRVC = Output(Bool())
 
   val issue = Output(Bool())
 
@@ -35,7 +35,7 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
   val instBufDataSliceIsRVC = WireDefault(0.U(numMask.W))
   val instBufDataSliceIndex = io.if_pc(log2Ceil(numMask) + 1, 1)
 //  val prevInstNotFinished = RegInit(false.B)
-  val prevInstNotFinished = !io.isRVC && (instBufDataSliceIndex === (numMask.U - 1.U))
+  val prevInstNotFinished = !io.curInstIsRVC && (instBufDataSliceIndex === (numMask.U - 1.U))
   val instBufDataSlice = Wire(VecInit(Seq.fill(numMask)(0.U(16.W))))
   val prevInstBuf = RegInit(0.U(16.W))
 
@@ -45,11 +45,11 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
       instBufDataSliceIsRVC(i) := slice(1,0) =/= 3.U
   }
 
-  io.isRVC := instBufDataSliceIsRVC(instBufDataSliceIndex)
+  io.curInstIsRVC := instBufDataSliceIsRVC(instBufDataSliceIndex)
 
   // fetch new entry from fetch queue when core consumed all instructions or pc is out of range
-  instBufEmpty := (instBufDataSliceIndex === (numMask - 2).U && !io.isRVC) ||
-    (instBufDataSliceIndex === (numMask - 1).U && io.isRVC)
+  instBufEmpty := (instBufDataSliceIndex === (numMask - 2).U && !io.curInstIsRVC) ||
+    (instBufDataSliceIndex === (numMask - 1).U && io.curInstIsRVC)
 
   // FIXME: What should be the condition??
   io.fetchQueueTail.ready := instBufEmpty && io.instPacket.fire
@@ -68,7 +68,7 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
   // Dequeue
   when(io.instPacket.fire) {
     io.instPacket.bits.xcpt := instBuf.bits.xcpt
-    when(io.isRVC) {
+    when(io.curInstIsRVC) {
       rvc.io.in := instBufDataSlice(instBufDataSliceIndex)
       io.instPacket.bits.data := rvc.io.out
     }.elsewhen(instBufDataSliceIndex =/= (numMask.U - 1.U)) {
