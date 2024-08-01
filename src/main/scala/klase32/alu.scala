@@ -12,7 +12,7 @@ class ALU(implicit p: Parameters) extends CoreModule with HasCoreParameters {
     val B = Input(UInt(mxLen.W))
     val F = Output(Bool())
     val R = Output(UInt(mxLen.W))
-    }
+  }
   )
   import ALUControlIE._
 
@@ -32,7 +32,7 @@ class ALU(implicit p: Parameters) extends CoreModule with HasCoreParameters {
     Mux(io.A(mxLen-1) === io.B(mxLen-1), adder_result(mxLen-1),
       Mux(isCompareUnsigned, io.B(mxLen-1), io.A(mxLen-1)))
   // GE, GEU, LT, LTU, SLT, SLTU, EQ, NE
-    io.F := Mux(io.ctrl === default, 0.U, isCompareInversed ^ Mux(isCompareEqual, a_xor_b === 0.U, lt))
+  io.F := Mux(io.ctrl === default, 0.U, isCompareInversed ^ Mux(isCompareEqual, a_xor_b === 0.U, lt))
 
   // SLL, SRL, SRA
   val (shamt, shin_r) = (io.B(4,0), io.A)
@@ -41,12 +41,12 @@ class ALU(implicit p: Parameters) extends CoreModule with HasCoreParameters {
   val shout_r = (Cat((isSub) & shin(mxLen-1), shin).asSInt >> shamt)(mxLen-1, 0)
   val shout_l = Reverse(shout_r)
   val shout = Mux(io.ctrl === SRL || io.ctrl === SRA, shout_r, 0.U) |
-              Mux(io.ctrl === SLL, shout_l, 0.U)
+    Mux(io.ctrl === SLL, shout_l, 0.U)
 
   // AND, OR, XOR
   // XOR || AND = OR
   val logic = Mux(io.ctrl === XOR || io.ctrl === OR, a_xor_b, 0.U) |
-              Mux(io.ctrl === OR || io.ctrl === AND, io.A & io.B, 0.U)
+    Mux(io.ctrl === OR || io.ctrl === AND, io.A & io.B, 0.U)
 
   // SLT, SLTU
   val slt = Mux(io.ctrl === SLT || io.ctrl === SLTU, lt, 0.U)
