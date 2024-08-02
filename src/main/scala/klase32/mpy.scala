@@ -21,9 +21,9 @@ class MPY(implicit p: Parameters) extends CoreModule {
     }
   )
 
-  val rs1Signed = Bool()
-  val rs2Signed = Bool()
-  val mostSignificantWord = Bool()
+  val rs1Signed = Wire(Bool())
+  val rs2Signed = Wire(Bool())
+  val mostSignificantWord = Wire(Bool())
 
   // Assume control signal does not fall down
   val valid = io.ctrl =/= default
@@ -58,6 +58,7 @@ class MPY(implicit p: Parameters) extends CoreModule {
     // What if sequential mul comes in?
     io.prod := Pipe(valid, prod, mpyLatency-1)
   }.otherwise {
-    io.prod := 0.S
+    io.prod.valid := false.B
+    io.prod.bits := 0.S
   }
 }
