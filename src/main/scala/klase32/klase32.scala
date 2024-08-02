@@ -30,7 +30,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // Module definition
   val alu = Module(new ALU)
   val lsu = Module(new LSU)
-  //val div = Module(new DIV)
+  val div = Module(new DIV)
   val mpy = Module(new MPY)
   val frontend = Module(new Frontend)
   val csr = Module(new CSRModule)
@@ -48,6 +48,9 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   val stallSig = WireInit(new Stall, DontCare)
   stallSig.ie.issue := !frontend.io.issue
   stallSig.ie.store := lsu.io.storeFull
+  stallSig.ie.csr := csr.io.csrWrite // modify this to not all csr writes
+  stallSig.ie.mpy := mpy.io.ctrl =/= MPYControlIE.default
+  stallSig.ie.div := div.io.busy
   // stallSig.ie.csr := csr.io.csrWrite
   stallSig.me.load := lsu.io.loadFull
   stallSig.me.wfi := csr.io.wfiOut
@@ -190,19 +193,35 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     //    RdType.ConsecPC -> (frontend.io.if_pc),
     RdType.ConsecPC -> (frontend.io.ie_pc + 4.U),
     RdType.BypassCSR -> csr.io.rd
-  ).map {case(k, v) => (k === ctrlSig.rdType, v)})
+  ).map {case(k, v) => (k === ctrlSig.rdType, v)} :+
+  (div.io.busy -> div.io.res) :+
+  (mpy.io.prod.valid -> mpy.io.prod.bits)
+  )
   reg.io.wp(1).bits.data := lsu.io.rddata
 
+  // MPY
+  mpy.io.ctrl := ctrlSig.mpyCtrl
+  mpy.io.A := rs1.asSInt // Can use mux
+  mpy.io.B := rs2.asSInt // Can use mux
+  mpy.io.fusedMul := false.B // FIXME: Fused multiply
+
+  // DIV
+  div.io.ctrl := ctrlSig.divCtrl
+  div.io.A := rs1.asSInt // Can use mux
+  div.io.B := rs2.asSInt // Can use mux
+  div.io.aluR := Mux(div.io.busy, alu.io.R, 0.S)
 
   // ALU
-  alu.io.ctrl := ctrlSig.aluCtrl
+  alu.io.ctrl := Mux(div.io.busy, div.io.aluCtrl, ctrlSig.aluCtrl)
 
   alu.io.A := Mux1H(Seq(
     OperandType.None -> 0.U,
     OperandType.Reg -> rs1,
     OperandType.PC -> ie_pc,
     OperandType.CSRImmediate -> ctrlSig.rs1 // rs1 field of instruction is imm field
-  ).map { case (k, v) => (k === ctrlSig.operandSelect.a, v) })
+  ).map { case (k, v) => (k === ctrlSig.operandSelect.a, v) } :+
+  (div.io.busy -> div.io.aluA)
+  )
 
   alu.io.B := Mux1H(Seq(
     OperandType.None -> 0.U,
@@ -211,13 +230,14 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     OperandType.UImmediate -> ctrlSig.imm.u.asUInt,
     OperandType.JImmediate -> ctrlSig.imm.j.asUInt,
     OperandType.SImmediate -> ctrlSig.imm.s.asUInt
-  ).map { case (k, v) => (k === ctrlSig.operandSelect.b, v) })
+  ).map { case (k, v) => (k === ctrlSig.operandSelect.b, v) } :+
+  (div.io.busy -> div.io.aluB)
+  )
   // printf(cf"ctrlSig.operandSelect.a: ${ctrlSig.operandSelect.a}\n")
   // printf(cf"ctrlSig.operandSelect.b: ${ctrlSig.operandSelect.b}\n")
   // printf(cf"alu.io.ctrl: ${alu.io.ctrl}\n")
   // printf(cf"alu.io.A: ${alu.io.A}%x\n")
   // printf(cf"alu.io.B: ${alu.io.B}%x\n")
-
 
 
   // CSR

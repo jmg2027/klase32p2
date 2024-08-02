@@ -72,6 +72,8 @@ class Stall extends StallBundle {
   val issue = Bool()
   val store = Bool()
   val csr = Bool()
+  val div = Bool()
+  val mpy = Bool()
  }
  val me = new StallBundle {
   val load = Bool()
