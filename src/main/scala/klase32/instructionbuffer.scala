@@ -24,7 +24,7 @@ class InstructionBufferIO(implicit p: Parameters) extends CoreBundle with HasCor
 // Use flush signal to reset
 class InstructionBuffer(implicit p: Parameters) extends CoreModule {
   val k = p(KLASE32ParamKey)
-  val numMask = log2Ceil(k.fetchWidth/8)
+  val numMask = k.fetchBits/16
 
   val io = IO(new InstructionBufferIO)
 
@@ -33,16 +33,16 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
   val instBuf = RegInit(0.U.asTypeOf(io.fetchQueueTail))
   val instBufEmpty = WireDefault(true.B)
   val instBufDataSliceIsRVC = WireDefault(0.U(numMask.W))
-  val instBufDataSliceIndex = io.if_pc(log2Ceil(numMask) + 1, 1)
+  val instBufDataSliceIndex = io.if_pc(log2Ceil(numMask), 1)
 //  val prevInstNotFinished = RegInit(false.B)
   val prevInstNotFinished = !io.curInstIsRVC && (instBufDataSliceIndex === (numMask.U - 1.U))
-  val instBufDataSlice = Wire(VecInit(Seq.fill(numMask)(0.U(16.W))))
+  val instBufDataSlice = VecInit(Seq.fill(numMask)(0.U(16.W)))
   val prevInstBuf = RegInit(0.U(16.W))
 
   instBufDataSlice.zipWithIndex.foreach {
     case (slice, i) =>
       slice := instBuf.bits.data(16*(i+1)-1, 16*i)
-      instBufDataSliceIsRVC(i) := slice(1,0) =/= 3.U
+      instBufDataSliceIsRVC(i) := (slice(1,0) =/= 3.U)
   }
 
   io.curInstIsRVC := instBufDataSliceIsRVC(instBufDataSliceIndex)
