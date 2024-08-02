@@ -47,6 +47,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   val io = IO(new FrontendIO())
 
+  val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = false, hasFlush = true))
   // When kill asserts, all previous requests are blown away
   io.epm.kill := fq.flush
 
@@ -91,7 +92,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // To extend to compressed mode, fetch queue should handle 16-bit data
   // when empty, enq data will be dequeued instantly
   // FIXME: Check for flow in jump
-  val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = false, hasFlush = true))
+
 
   // Fetch counter
   val fqCounter = withReset(reset.asBool || fq.flush) { RegInit((fetchqueueEntries - 1).U) }
@@ -154,7 +155,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   // When flush, ignore acks for on-the-fly reqs
   // All requests recieve ack so overflow should not happen
-  // Flush can occur only after when enq.valid is enable, except for async exception
+  // Flush can occur only after when enq.start is enable, except for async exception
   // So maximum number of on-the-fly requests are 2 times of fetchqueueEntries
   // For exception(async exception), only 1 request will comes out
   val reqCounter = RegInit(0.U(log2Ceil(fetchqueueEntries * 2 - 1).W))
@@ -201,7 +202,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   fq.io.enq.bits.data := io.epm.data
   fq.io.enq.bits.xcpt := io.epm.xcpt
-//  fq.io.enq.valid := io.epm.ack && !ignoreAck && fetchAvail// Suppose simultaneous ack and data response
+//  fq.io.enq.start := io.epm.ack && !ignoreAck && fetchAvail// Suppose simultaneous ack and data response
   fq.io.enq.valid := io.epm.ack && !ignoreAck && fetchAvail// Suppose simultaneous ack and data response
 
   // Issue
@@ -210,7 +211,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   Fetch queue will fetch fetchwidth. fetchqueue should store 2 bytes align
   Extended instruction will be issued: 32 bits
    */
-//  val instrAvail = fq.io.deq.valid && !regBooting && !ignoreAckWire && !ignoreAck
+//  val instrAvail = fq.io.deq.start && !regBooting && !ignoreAckWire && !ignoreAck
   val instrAvail = fq.io.deq.valid && !regBooting
   // When fq being flushed, NOP is issued(1 cycle stall)
   val issue = instrAvail && issueable && !ignoreAck
@@ -233,7 +234,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // printf(cf"[FE] jump: $jump\n")
   // printf(cf"[FE] issue: $issue\n")
   // printf(cf"boot: $regBooting\n")
-  // printf(cf"fq: ${fq.io.deq.valid}\n")
+  // printf(cf"fq: ${fq.io.deq.start}\n")
   // printf(cf"stall: ${io.stall}\n")
 
   val instBuf = withReset(reset.asBool || fq.flush) { Module(new InstructionBuffer()) }
