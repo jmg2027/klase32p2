@@ -16,7 +16,7 @@ class DIV(implicit p: Parameters) extends CoreModule {
       val ctrl = Input(DIVControlIE())
       val A = Input(SInt(xLen.W))
       val B = Input(SInt(xLen.W))
-      val res = Valid(Output(SInt(xLen.W)))
+      val res = Valid(Output(UInt(xLen.W)))
 
       // Subtract operations are performed in the ALU
       val aluCtrl = Output(ALUControlIE())
@@ -43,24 +43,29 @@ class DIV(implicit p: Parameters) extends CoreModule {
   val divisor = Mux(signed && io.B < 0.S, -io.B, io.B)
   val dividend = Mux(signed && io.A < 0.S, -io.A, io.A)
 
+  // Initialize IO
+  io.aluCtrl := ALUControlIE.default
+  io.aluA := 0.U
+  io.aluB := 0.U
 
-  io.res.bits := Mux(isRem, remainder, quotient)
+  io.res.valid := false.B
+  io.res.bits := Mux(isRem, remainder, quotient).asUInt
   // Special cases
   when(io.B === 0.S) {
     when(isRem) {
       io.res.valid := true.B
-      io.res.bits := io.A
+      io.res.bits := io.A.asUInt
     }.otherwise {
       io.res.valid := true.B
-      io.res.bits := -1.S
+      io.res.bits := (-1.S).asUInt
     }
   }.elsewhen(io.B === -1.S && io.A === (1 << (xLen-1)).S) {
     when(io.ctrl === DIV) {
       io.res.valid := true.B
-      io.res.bits := io.A
+      io.res.bits := io.A.asUInt
     }.elsewhen(io.ctrl === REM) {
       io.res.valid := true.B
-      io.res.bits := 0.S
+      io.res.bits := 0.U
     }
   }.otherwise { // normal operation
     switch(state) {
@@ -73,6 +78,7 @@ class DIV(implicit p: Parameters) extends CoreModule {
         }
       }
       is(sCompute) {
+        io.res.valid := false.B
         val shiftRemainder = (remainder << 1).asSInt | (dividend((xLen)-1)).asSInt
         io.aluCtrl := ALUControlIE.SUB
         io.aluA := shiftRemainder.asUInt
