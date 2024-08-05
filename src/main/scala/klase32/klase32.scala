@@ -51,7 +51,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   stallSig.ie.csr := csr.io.csrWrite // modify this to not all csr writes
   stallSig.ie.mpy := mpy.io.ctrl =/= MPYControlIE.default
   stallSig.ie.div := div.io.busy
-  // stallSig.ie.csr := csr.io.csrWrite
+
   stallSig.me.load := lsu.io.loadFull
   stallSig.me.wfi := csr.io.wfiOut
   stallSig.me.hzd := hzd.io.stall
@@ -119,19 +119,19 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     (lsu.io.ldXcpt.gf, Causes.load_guest_page_fault.U),
     (lsu.io.ldXcpt.ae, Causes.load_access.U),
   ))
-//
-//  // Exception pipeline
-//  val ieXcptReg = RegEnable(ieXcpt, !stallME)
-//  val ieCauseReg = RegEnable(ieCause, !stallME)
-//
-//  // FIXME: Until cache
-//  val (meXcpt, meCause): (Bool, UInt)= checkExceptions(List(
-//    (ieXcptReg, ieCauseReg),
-//    (lsu.io.ldXcpt.ma, Causes.misaligned_load.U),
-//    (lsu.io.ldXcpt.pf, Causes.load_page_fault.U),
-//    (lsu.io.ldXcpt.gf, Causes.load_guest_page_fault.U),
-//    (lsu.io.ldXcpt.ae, Causes.load_access.U),
-//  ))
+  //
+  //  // Exception pipeline
+  //  val ieXcptReg = RegEnable(ieXcpt, !stallME)
+  //  val ieCauseReg = RegEnable(ieCause, !stallME)
+  //
+  //  // FIXME: Until cache
+  //  val (meXcpt, meCause): (Bool, UInt)= checkExceptions(List(
+  //    (ieXcptReg, ieCauseReg),
+  //    (lsu.io.ldXcpt.ma, Causes.misaligned_load.U),
+  //    (lsu.io.ldXcpt.pf, Causes.load_page_fault.U),
+  //    (lsu.io.ldXcpt.gf, Causes.load_guest_page_fault.U),
+  //    (lsu.io.ldXcpt.ae, Causes.load_access.U),
+  //  ))
 
 
   // Fetch & Issue
@@ -180,11 +180,11 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   reg.io.wp(0).bits.addr := ctrlSig.rd
   reg.io.wp(1).bits.addr := me_rdaddr
   reg.io.wp(0).valid := ctrlSig.w0Wb.asUInt.orR && !stall
-  //  reg.io.wp(0).valid := ctrlSig.w0Wb.asUInt.orR
+  //  reg.io.wp(0).start := ctrlSig.w0Wb.asUInt.orR
   // FIXME: Decoupling
   reg.io.wp(1).valid := me_isLoad.asUInt.orR && !stallME
-  //  reg.io.wp(1).valid := me_isLoad.asUInt.orR
-  // printf(cf"reg.io.wp(0).valid: ${reg.io.wp(0).valid}\n")
+  //  reg.io.wp(1).start := me_isLoad.asUInt.orR
+  // printf(cf"reg.io.wp(0).start: ${reg.io.wp(0).start}\n")
   // printf(cf"alu.io.R: ${alu.io.R}%x\n")
 
   reg.io.wp(0).bits.data := Mux1H(Seq(
@@ -194,8 +194,8 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     RdType.ConsecPC -> (frontend.io.ie_pc + 4.U),
     RdType.BypassCSR -> csr.io.rd
   ).map {case(k, v) => (k === ctrlSig.rdType, v)} :+
-  (div.io.busy -> div.io.res) :+
-  (mpy.io.prod.valid -> mpy.io.prod.bits)
+    (div.io.res.valid -> div.io.res.bits) :+
+    (mpy.io.prod.valid -> mpy.io.prod.bits)
   )
   reg.io.wp(1).bits.data := lsu.io.rddata
 
@@ -209,7 +209,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   div.io.ctrl := ctrlSig.divCtrl
   div.io.A := rs1.asSInt // Can use mux
   div.io.B := rs2.asSInt // Can use mux
-  div.io.aluR := Mux(div.io.busy, alu.io.R, 0.S)
+  div.io.aluR := Mux(div.io.busy, alu.io.R, 0.U)
 
   // ALU
   alu.io.ctrl := Mux(div.io.busy, div.io.aluCtrl, ctrlSig.aluCtrl)
@@ -220,7 +220,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     OperandType.PC -> ie_pc,
     OperandType.CSRImmediate -> ctrlSig.rs1 // rs1 field of instruction is imm field
   ).map { case (k, v) => (k === ctrlSig.operandSelect.a, v) } :+
-  (div.io.busy -> div.io.aluA)
+    (div.io.busy -> div.io.aluA)
   )
 
   alu.io.B := Mux1H(Seq(
@@ -231,7 +231,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     OperandType.JImmediate -> ctrlSig.imm.j.asUInt,
     OperandType.SImmediate -> ctrlSig.imm.s.asUInt
   ).map { case (k, v) => (k === ctrlSig.operandSelect.b, v) } :+
-  (div.io.busy -> div.io.aluB)
+    (div.io.busy -> div.io.aluB)
   )
   // printf(cf"ctrlSig.operandSelect.a: ${ctrlSig.operandSelect.a}\n")
   // printf(cf"ctrlSig.operandSelect.b: ${ctrlSig.operandSelect.b}\n")
@@ -252,8 +252,8 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   csr.io.wfi := ctrlSig.wfi
 
   // FIXME: When speculative load/store supported, exception should be failed load/store pc
-//  csr.io.exception := meXcpt
-//  csr.io.cause := meCause
+  //  csr.io.exception := meXcpt
+  //  csr.io.cause := meCause
   csr.io.exception := ieXcpt
   csr.io.cause := ieCause
   csr.io.epc := me_pc
