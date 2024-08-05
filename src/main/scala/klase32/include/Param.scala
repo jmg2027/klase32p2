@@ -21,7 +21,7 @@ object param {
                                usingHypervisor: Boolean = false,
                                usingUser: Boolean = false,
 
-                               usingOuterBoodAddr: Boolean = false,
+                               usingOuterBootAddr: Boolean = false,
 
                                mpyLatency: Int = 2,
 
@@ -87,7 +87,7 @@ trait HasCoreParameters {
   def usingSupervisor = coreParams.usingSupervisor
   def usingHypervisor = coreParams.usingHypervisor
   def usingUser = coreParams.usingUser
-  def usingOuterBoodAddr = coreParams.usingOuterBoodAddr
+  def usingOuterBootAddr = coreParams.usingOuterBootAddr
 
   def bootAddrParam = coreParams.bootAddr
   def regNum = coreParams.regNum
