@@ -48,6 +48,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val io = IO(new FrontendIO())
 
   val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = false, hasFlush = true))
+
   // When kill asserts, all previous requests are blown away
   io.epm.kill := fq.flush
 
@@ -70,7 +71,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   }
 
   val bootAddrWire = WireDefault(bootAddrParam.U)
-  if (usingOuterBoodAddr) {
+  if (usingOuterBootAddr) {
     bootAddrWire := io.epm.bootAddr
   }
 
@@ -78,7 +79,6 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val brIE = brCond && !io.stall
   val jalIE = jalCond && !io.stall
   val jalrIE = jalrCond && !io.stall
-  //  val jump = brIE || jalIE || jalrIE || regBooting
   val jump = brIE || jalIE || jalrIE
   io.jump := jump
 
@@ -87,12 +87,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   // Fetch
   // Fetch Queue
-  // FIXME: Support for C extension
-  // For now 32-bit N entries
-  // To extend to compressed mode, fetch queue should handle 16-bit data
-  // when empty, enq data will be dequeued instantly
   // FIXME: Check for flow in jump
-
 
   // Fetch counter
   val fqCounter = withReset(reset.asBool || fq.flush) { RegInit((fetchqueueEntries - 1).U) }
@@ -104,7 +99,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   }.elsewhen (fq.io.deq.fire) {
     fqCounter := fqCounter + 1.U
   }
-  val fetchAvail = fqCounter =/= 0.U
+  val fqNotFull = fqCounter =/= 0.U
 
   // When exception happens, only 1 request can go out
   val xcptReqOntheway = RegInit(false.B)
@@ -123,7 +118,9 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // Fence does not flush fetch queue
   // fq.flush := io.flushFetchQueue.orR
 
-  val fetch = fetchAvail && !regBooting && !xcptReqOntheway && !io.wfi
+  val fetch = fqNotFull && !regBooting && !xcptReqOntheway && !io.wfi
+
+  // Fetch PC
   val fetchPC = Reg(UInt(mxLen.W))
 
   printf(cf"[FE] exception: ${io.exception}\n")
@@ -158,8 +155,8 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // Flush can occur only after when enq.start is enable, except for async exception
   // So maximum number of on-the-fly requests are 2 times of fetchqueueEntries
   // For exception(async exception), only 1 request will comes out
-  val reqCounter = RegInit(0.U(log2Ceil(fetchqueueEntries * 2 - 1).W))
-  val ignoreAck = RegInit(false.B)
+//  val reqCounter = RegInit(0.U(log2Ceil(fetchqueueEntries * 2 - 1).W))
+//  val ignoreAck = RegInit(false.B)
 //  val ignoreAckWire = RegInit(false.B)
 //  when(io.epm.req && io.epm.ack) {
 //    reqCounter := reqCounter
@@ -177,33 +174,33 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 //  }
 
 
-  when(fq.flush && !xcptReqOntheway) {
-    reqCounter := reqCounter + (fetchqueueEntries - 1).U - fqCounter
-    ignoreAck := true.B
-  }
+//  when(fq.flush && !xcptReqOntheway) {
+//    reqCounter := reqCounter + (fetchqueueEntries - 1).U - fqCounter
+//    ignoreAck := true.B
+//  }
+//
+//  when(ignoreAck && io.epm.ack) {
+//    reqCounter := reqCounter - 1.U
+//  }
+//
+//  //  when(reqCounter === 0.U && ignoreAck) {
+//  when(reqCounter === 1.U && ignoreAck && io.epm.ack) {
+//    ignoreAck := false.B
+//  }
 
-  when(ignoreAck && io.epm.ack) {
-    reqCounter := reqCounter - 1.U
-  }
-
-  //  when(reqCounter === 0.U && ignoreAck) {
-  when(reqCounter === 1.U && ignoreAck && io.epm.ack) {
-    ignoreAck := false.B
-  }
-
-  io.epm.addr := fetchPC
+  // 4 bytes align
+  io.epm.addr := fetchPC(31, 2) ## 0.U(2.W)
   // printf(cf"[FE] fetchPC: 0x${io.epm.addr}%x\n")
-  //  io.epm.req := fetch
   io.epm.req := fetch
   // FIXME: Should be handled in the future
   io.epm.flush := io.flushIcache.asUInt.orR
-  // io.epm.flush := io.flushIcache.asUInt.orR || io.flushFetchQueue.ie.csr
   io.epm.cmd := 0.U // int load
 
   fq.io.enq.bits.data := io.epm.data
   fq.io.enq.bits.xcpt := io.epm.xcpt
-//  fq.io.enq.start := io.epm.ack && !ignoreAck && fetchAvail// Suppose simultaneous ack and data response
-  fq.io.enq.valid := io.epm.ack && !ignoreAck && fetchAvail// Suppose simultaneous ack and data response
+//  fq.io.enq.start := io.epm.ack && !ignoreAck && fqNotFull// Suppose simultaneous ack and data response
+  // FIXME: We already dealt with fqNotFull with fq requests, so maybe fqNotFull condition is not necessary
+  fq.io.enq.valid := io.epm.ack && fqNotFull// Suppose simultaneous ack and data response
 
   // Issue
   val issueable = !io.divBusy
