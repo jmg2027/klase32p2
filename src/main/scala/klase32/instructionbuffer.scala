@@ -30,9 +30,10 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
 
   val rvc = Module(new RVCExpander())
 
-  val instBuf = RegInit(0.U.asTypeOf(io.fetchQueueTail))
+  val instBuf = RegInit(0.U.asTypeOf(io.fetchQueueTail.bits))
   val instBufEmpty = WireDefault(true.B)
-  val instBufDataSliceIsRVC = WireDefault(0.U(numMask.W))
+//  val instBufDataSliceIsRVC = WireDefault(0.U(numMask.W))
+  val instBufDataSliceIsRVC = VecInit(Seq.fill(numMask)(false.B))
   val instBufDataSliceIndex = io.if_pc(log2Ceil(numMask), 1)
 //  val prevInstNotFinished = RegInit(false.B)
   val prevInstNotFinished = !io.curInstIsRVC && (instBufDataSliceIndex === (numMask.U - 1.U))
@@ -41,7 +42,7 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
 
   instBufDataSlice.zipWithIndex.foreach {
     case (slice, i) =>
-      slice := instBuf.bits.data(16*(i+1)-1, 16*i)
+      slice := instBuf.data(16*(i+1)-1, 16*i)
       instBufDataSliceIsRVC(i) := (slice(1,0) =/= 3.U)
   }
 
@@ -65,16 +66,21 @@ class InstructionBuffer(implicit p: Parameters) extends CoreModule {
   }
 
 
+  io.instPacket.bits.xcpt := 0.U.asTypeOf(new HeartXcpt)
+  io.instPacket.bits.data := 0.U
+
+  rvc.io.in := 0.U
   // Dequeue
   when(io.instPacket.fire) {
-    io.instPacket.bits.xcpt := instBuf.bits.xcpt
+    io.instPacket.bits.xcpt := instBuf.xcpt
+    io.instPacket.bits.data := rvc.io.out
     when(io.curInstIsRVC) {
-      rvc.io.in := instBufDataSlice(instBufDataSliceIndex)
-      io.instPacket.bits.data := rvc.io.out
+      // Can fix this to accept 16bits
+      rvc.io.in := 0.U(16.W) ## instBufDataSlice(instBufDataSliceIndex)
     }.elsewhen(instBufDataSliceIndex =/= (numMask.U - 1.U)) {
-      io.instPacket.bits.data := instBufDataSlice(instBufDataSliceIndex + 1.U) ## instBufDataSlice(instBufDataSliceIndex)
+      rvc.io.in:= instBufDataSlice(instBufDataSliceIndex + 1.U) ## instBufDataSlice(instBufDataSliceIndex)
     }.otherwise {
-      io.instPacket.bits.data := instBufDataSlice(0) ## prevInstBuf
+      rvc.io.in := instBufDataSlice(0) ## prevInstBuf
     }
   }
 }
