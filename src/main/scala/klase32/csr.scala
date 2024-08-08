@@ -411,7 +411,10 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     csr.mepc.write(io.epc)
     csr.mcause.write(io.cause)
     csr.mtval.write(tval)
-    io.evec := Mux(csr.mtvec.reg.mode === 0.U, csr.mtvec.reg.base << 2.U, (csr.mtvec.reg.base << 2.U) + (io.cause << 2.U))
+    io.evec := Mux1H(Seq(
+      (csr.mtvec.reg.mode === 0.U) -> (csr.mtvec.reg.base << 2.U),
+      (csr.mtvec.reg.mode === 1.U) -> ((csr.mtvec.reg.base << 2.U) + (io.cause << 2.U))
+    ))
   }.elsewhen (io.mret.asUInt.orR) {
     csr.mepc.read(io.evec)
   }
