@@ -73,11 +73,21 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
 
   // Store buffer
   // In-order Store queue will monitor whether store is done by ack
-  val sb = Module(new Queue(new StoreBufferEntry, storeBufferEntries))
+  val sb = Module(new QueueWithAccessableEntry(new StoreBufferEntry, storeBufferEntries))
   sb.io.enq.bits.valid := true.B
   sb.io.enq.valid := (io.lsuctrlIE.isStore === StoreControl.EN) && !io.stall
+  sb.io.enq.bits.addr := io.edm.st_paddr
+  sb.io.enq.bits.mask := io.edm.st_mask
+  sb.io.enq.bits.data := io.edm.st_wdata
   io.storeFull := !sb.io.enq.ready
 //  printf(cf"[LSU] sb.enq: ${sb.io.enq}\n")
+//  val loadMatchStore = VecInit(Seq.tabulate(storeBufferEntries), false.B)
+//
+//  // Compare load and store address
+//  for (i <- 0 until storeBufferEntries) {
+//    val loadMatchStore(i) = (sb === io.addr) && (io.lsuctrlIE.isLoad === LoadControl.EN))
+//  }
+
 
 
   // Request to DM
@@ -85,7 +95,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
     Seq(
       (io.edm.ld_req) -> M_XRD,
       ((io.edm.st_req) && (io.edm.st_mask === "b1111".U)) -> M_XWR,
-      ((io.edm.st_req) && (io.edm.st_mask =/= "b1111".U)) -> M_XWR,
+      ((io.edm.st_req) && (io.edm.st_mask =/= "b1111".U)) -> M_PWR,
     )
   )
 
@@ -119,7 +129,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   // FIXME: Why do we need to stall signals for enq/deq?
   // FIXME: Within TCM address bound, store should not be stalled
   // FIXME: TCM address comes from io port
-//  io.edm.st_req := sb.io.deq.valid && !io.stall
+//  io.edm.st_req := sb.io.deq.start && !io.stall
   // Request is sent when store buffer can accept store request
   // Store buffer will dequeue when ack arrives
   io.edm.st_req := sb.io.enq.fire
