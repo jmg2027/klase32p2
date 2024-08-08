@@ -159,9 +159,9 @@ class FetchQueueEntry(implicit p: Parameters) extends CoreBundle {
 class StoreBufferEntry(implicit p: Parameters) extends CoreBundle {
  val k = p(KLASE32ParamKey)
 
- // val addr = UInt(k.vaddrBits.W)
- // val data = UInt(xLen.W)
- // val mask = UInt((wordsize/8).W)
+  val addr = UInt(k.vaddrBits.W)
+  val data = UInt(xLen.W)
+  val mask = UInt((wordsize/8).W)
  val valid = Bool()
 }
 
@@ -180,7 +180,7 @@ class EdmIntf(implicit p: Parameters) extends CoreBundle {
 
  val ld_ack = Input(Bool())
  val ld_rdata = Input(UInt(k.dataWidth.W))
- val ld_ppn = Input(UInt(22.W)) // only valid when dm_ld_req && dm_cmd.isOneOf(M_XWR, M_PWR)
+ val ld_ppn = Input(UInt(22.W)) // only start when dm_ld_req && dm_cmd.isOneOf(M_XWR, M_PWR)
  val ld_replay = Input(Bool()) // ld_replay is asserted when ld_req is for mmio and st_mmio_reserved is 1
  val ld_kill = Output(Bool())
  val ld_mmio_kill = Output(Bool())
