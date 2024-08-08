@@ -15,15 +15,12 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
   val exception = Input(Bool())
   val eret = Input(Bool())
 
-  val divBusy = Input(Bool())
   val stall = Input(Bool())
   val wfi = Input(Bool())
 
   val aluR = Input(UInt(mxLen.W))
   val ie_pc = Input(UInt(mxLen.W))
   val brOffset = Input(UInt(13.W))
-
-  val issue = Output(Bool())
 
 //  val instPacket = Output(new Bundle {
 //    val inst = UInt(wordsize.W)
@@ -150,6 +147,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   //    fq.flush := false.B
   //  }
 
+  // FIXME: Used kill signal for this
   // When flush, ignore acks for on-the-fly reqs
   // All requests recieve ack so overflow should not happen
   // Flush can occur only after when enq.start is enable, except for async exception
@@ -200,10 +198,10 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   fq.io.enq.bits.xcpt := io.epm.xcpt
 //  fq.io.enq.start := io.epm.ack && !ignoreAck && fqNotFull// Suppose simultaneous ack and data response
   // FIXME: We already dealt with fqNotFull with fq requests, so maybe fqNotFull condition is not necessary
-  fq.io.enq.valid := io.epm.ack && fqNotFull// Suppose simultaneous ack and data response
+//  fq.io.enq.valid := io.epm.ack && fqNotFull// Suppose simultaneous ack and data response
+  fq.io.enq.valid := io.epm.ack // Suppose simultaneous ack and data response
 
   // Issue
-  val issueable = !io.divBusy
   /* FIXME: RVC
   Fetch queue will fetch fetchwidth. fetchqueue should store 2 bytes align
   Extended instruction will be issued: 32 bits
@@ -211,7 +209,8 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 //  val instrAvail = fq.io.deq.start && !regBooting && !ignoreAckWire && !ignoreAck
   val instrAvail = fq.io.deq.valid && !regBooting
   // When fq being flushed, NOP is issued(1 cycle stall)
-  val issue = instrAvail && issueable && !ignoreAck
+//  val issue = instrAvail && !io.stall
+  val issue = instrAvail && !io.stall
 
 //  val instIF = fq.io.deq.bits.data
 //  val xcptIF = fq.io.deq.bits.xcpt
@@ -237,7 +236,8 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val instBuf = withReset(reset.asBool || fq.flush) { Module(new InstructionBuffer()) }
   val issueLength = Mux(instBuf.io.curInstIsRVC, 2.U, 4.U)
 
-  when(issue && !io.stall) {
+//  when(issue && !io.stall) {
+  when(instBuf.io.instPacket.fire) {
     when(io.exception || io.eret) {
       pcReg := io.evec
     }.elsewhen(jump) {
@@ -252,15 +252,13 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 //  pcWrite := Mux(fq.flush, fetchPC, pcReg + 4.U)
 
   // Issue
-  fq.io.deq.ready := !io.stall // issue signal will block when stalled
-  io.instPacket <> fq.io.deq
-  io.issue := issue
+//  fq.io.deq.ready := !io.stall // issue signal will block when stalled
+//  io.instPacket <> fq.io.deq
+//  io.issue := issue
 
   // Instruction buffer
-
   instBuf.io.fetchQueueTail <> fq.io.deq
   io.instPacket <> instBuf.io.instPacket
   instBuf.io.if_pc := pcReg
-
-
+  instBuf.io.stall := io.stall
 }
