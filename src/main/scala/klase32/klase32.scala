@@ -7,7 +7,9 @@ import klase32.config._
 import snitch.enums.{OperandType, RdType}
 import freechips.rocketchip.rocket.Causes
 
-class KLASE32IO(implicit p: Parameters) extends Bundle with KLASE32IOEtc {
+class KLASE32IO(implicit p: Parameters) extends CoreBundle
+  with KLASE32IOEtc
+  with KLASE32IORVFI {
   //  val acc = new Acc.Interface
   val interrupt = Input(new Interrupt)
   val edm = new EdmIntf
@@ -16,8 +18,13 @@ class KLASE32IO(implicit p: Parameters) extends Bundle with KLASE32IOEtc {
   //  val dbg = new DbgIntf
 }
 
-trait KLASE32IOEtc extends Bundle {
+trait KLASE32IOEtc { this: CoreBundle =>
   val powerdown = Output(Bool())
+  val forceStall = Input(Bool())
+}
+
+trait KLASE32IORVFI { this: CoreBundle =>
+//  val rvfiValid = Output(Bool())
 }
 
 class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
@@ -46,10 +53,10 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   // Stall
   val stallSig = WireInit(new Stall, DontCare)
-  stallSig.ie.issue := !frontend.io.issue
+//  stallSig.ie.issue := !frontend.io.instPacket.valid
   stallSig.ie.store := lsu.io.storeFull
   stallSig.ie.csr := csr.io.csrWrite // modify this to not all csr writes
-  stallSig.ie.mpy := mpy.io.ctrl =/= MPYControlIE.default
+  stallSig.ie.mpy := mpy.io.prod.valid
   stallSig.ie.div := div.io.busy
 
   stallSig.me.load := lsu.io.loadFull
@@ -58,7 +65,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   stallSig.me.fence := ctrlSig.fence.asUInt.orR && (lsu.io.loadFull || lsu.io.storeFull)
   val stallIE = stallSig.ie.orR
   val stallME = stallSig.me.orR
-  val stall = stallIE || stallME
+  val stall = stallIE || stallME || io.forceStall
 
   // Flush
   // FIXME: Can be optimized
@@ -74,6 +81,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   // Pipeline
   //  val ie_inst = RegEnable(frontend.io.instPacket.inst, bitPatToUInt(NOP), !stall && frontend.io.issue)
+  frontend.io.instPacket.ready := !stall
   val ie_inst = withReset(flush) {RegEnable(frontend.io.instPacket.bits.data, bitPatToUInt(NOP), !stall)}
   val ie_pc = withReset(flush) {RegEnable(frontend.io.if_pc, !stall)}
 
@@ -144,7 +152,6 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   frontend.io.flushIcache := ctrlSig.flushICache
   frontend.io.flushFetchQueue := flushSig ; dontTouch(frontend.io.flushFetchQueue)
 
-  frontend.io.divBusy := DontCare
   frontend.io.wfi := csr.io.wfiOut
 
   frontend.io.evec := csr.io.evec
