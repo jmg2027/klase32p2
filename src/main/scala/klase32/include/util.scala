@@ -18,7 +18,7 @@ class QueueWithAccessableEntry[T <: Data](
                                            implicit compileOptions: chisel3.CompileOptions)
   extends Queue[T](gen, entries, pipe, flow, useSyncReadMem, hasFlush) {
   val entry = IO(Output(Vec(entries, genType)))
-  for (i <-0 until entries) {
+  for (i <- 0 until entries) {
     entry(i) := ram(i)
   }
 }
