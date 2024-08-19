@@ -2,7 +2,7 @@ package klase32
 
 import chisel3._
 import chisel3.util._
-import chisel3.util.BitPat.bitPatToUInt
+import chisel3.util.BitPat.{bitPatToUInt, dontCare}
 import klase32.config._
 import snitch.enums.{OperandType, RdType}
 import freechips.rocketchip.rocket.Causes
@@ -56,7 +56,8 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 //  stallSig.ie.issue := !frontend.io.instPacket.valid
   stallSig.ie.store := lsu.io.storeFull
   stallSig.ie.csr := csr.io.csrWrite // modify this to not all csr writes
-  stallSig.ie.mpy := mpy.io.prod.valid
+  stallSig.ie.mpy := mpy.io.busy
+//  stallSig.ie.mpy := mpy.io.prod.valid
   stallSig.ie.div := div.io.busy
 
   stallSig.me.load := lsu.io.loadFull
@@ -144,7 +145,11 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   // Fetch & Issue
   io.epm <> frontend.io.epm
-  io.epm.kill := DontCare
+  if (useInstKill) {
+    io.epm.kill := flushSig
+  } else {
+    io.epm.kill := DontCare
+  }
 
 
   // ctrl
@@ -221,25 +226,39 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // ALU
   alu.io.ctrl := Mux(div.io.busy, div.io.aluCtrl, ctrlSig.aluCtrl)
 
-  alu.io.A := Mux1H(Seq(
-    OperandType.None -> 0.U,
-    OperandType.Reg -> rs1,
-    OperandType.PC -> ie_pc,
-    OperandType.CSRImmediate -> ctrlSig.rs1 // rs1 field of instruction is imm field
-  ).map { case (k, v) => (k === ctrlSig.operandSelect.a, v) } :+
-    (div.io.busy -> div.io.aluA)
+  alu.io.A := Mux(div.io.busy, div.io.aluA,
+        Mux1H(Seq(
+          OperandType.None -> 0.U,
+          OperandType.Reg -> rs1,
+          OperandType.PC -> ie_pc,
+          OperandType.CSRImmediate -> ctrlSig.rs1 // rs1 field of instruction is imm field
+      ).map { case (k, v) => (k === ctrlSig.operandSelect.a, v) }
+    )
   )
 
-  alu.io.B := Mux1H(Seq(
-    OperandType.None -> 0.U,
-    OperandType.Reg -> rs2,
-    OperandType.IImmediate -> ctrlSig.imm.i.asUInt,
-    OperandType.UImmediate -> ctrlSig.imm.u.asUInt,
-    OperandType.JImmediate -> ctrlSig.imm.j.asUInt,
-    OperandType.SImmediate -> ctrlSig.imm.s.asUInt
-  ).map { case (k, v) => (k === ctrlSig.operandSelect.b, v) } :+
-    (div.io.busy -> div.io.aluB)
+  alu.io.B := Mux(div.io.busy, div.io.aluB,
+    Mux1H(Seq(
+      OperandType.None -> 0.U,
+      OperandType.Reg -> rs2,
+      OperandType.IImmediate -> ctrlSig.imm.i.asUInt,
+      OperandType.UImmediate -> ctrlSig.imm.u.asUInt,
+      OperandType.JImmediate -> ctrlSig.imm.j.asUInt,
+      OperandType.SImmediate -> ctrlSig.imm.s.asUInt
+    ).map { case (k, v) => (k === ctrlSig.operandSelect.b, v) }
+    )
   )
+
+
+      //  alu.io.B := Mux1H(Seq(
+//    OperandType.None -> 0.U,
+//    OperandType.Reg -> rs2,
+//    OperandType.IImmediate -> ctrlSig.imm.i.asUInt,
+//    OperandType.UImmediate -> ctrlSig.imm.u.asUInt,
+//    OperandType.JImmediate -> ctrlSig.imm.j.asUInt,
+//    OperandType.SImmediate -> ctrlSig.imm.s.asUInt
+//  ).map { case (k, v) => (k === ctrlSig.operandSelect.b, v) } :+
+//    (div.io.busy -> div.io.aluB)
+//  )
   // printf(cf"ctrlSig.operandSelect.a: ${ctrlSig.operandSelect.a}\n")
   // printf(cf"ctrlSig.operandSelect.b: ${ctrlSig.operandSelect.b}\n")
   // printf(cf"alu.io.ctrl: ${alu.io.ctrl}\n")
