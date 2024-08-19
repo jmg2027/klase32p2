@@ -76,6 +76,9 @@ class MPY(implicit p: Parameters) extends CoreModule {
   //}
 
   val valid = io.ctrl =/= default
+  val start = Wire(Bool())
+
+  io.busy := start
 
   rs1Signed := false.B
   rs2Signed := false.B
@@ -83,24 +86,28 @@ class MPY(implicit p: Parameters) extends CoreModule {
 
   io.prod.valid := false.B
   io.prod.bits := 0.U
-  io.busy := false.B
+  start := false.B
 
   switch(state) {
     is(sIdle) {
       io.prod.valid := false.B
       when(valid) {
         state := sCompute
+        start := true.B
       }
+    }
+    is(sCompute) {
+      state := sIdle
       when(io.ctrl === MUL) {
         rs1Signed := true.B
         rs2Signed := true.B
         mostSignificantWord := false.B
       }.elsewhen(io.ctrl === MULH) {
-        rs1Signed := false.B
-        rs2Signed := false.B
+        rs1Signed := true.B
+        rs2Signed := true.B
         mostSignificantWord := true.B
       }.elsewhen(io.ctrl === MULHU) {
-        rs1Signed := true.B
+        rs1Signed := false.B
         rs2Signed := false.B
         mostSignificantWord := true.B
       }.otherwise {
@@ -108,19 +115,17 @@ class MPY(implicit p: Parameters) extends CoreModule {
         rs2Signed := false.B
         mostSignificantWord := true.B
       }
-    }
-    is(sCompute) {
-      state := sIdle
-      val a = Wire(UInt((xLen + 1).W))
-      val b = Wire(UInt((xLen + 1).W))
-      val p = Wire(UInt(((xLen + 1) * 2 + 1).W))
+      val a = Wire(SInt((xLen + 1).W))
+      val b = Wire(SInt((xLen + 1).W))
+      val p = Wire(SInt(((xLen + 1) * 2 + 1).W))
 
-      a := Cat((rs1Signed & io.A(31)), io.A.asUInt)
-      b := Cat((rs2Signed & io.B(31)), io.B.asUInt)
+      a := Cat((rs1Signed && io.A(31)), io.A.asUInt).asSInt
+      b := Cat((rs2Signed && io.B(31)), io.B.asUInt).asSInt
       p := a * b
       val prod = Mux(mostSignificantWord, p(63, 32).asSInt, p(31, 0).asSInt).asUInt
       io.prod.valid := true.B
       io.prod.bits := prod
+      start := false.B
     }
   }
 }
