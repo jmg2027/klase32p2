@@ -10,6 +10,7 @@ import klase32.param.KLASE32ParamKey
 
 class DIV(implicit p: Parameters) extends CoreModule {
   import DIVControlIE._
+  val MINUS_ONE = (1 << xLen - 1).S.asUInt
   val k = p(KLASE32ParamKey)
 
     val io = IO(new Bundle{
@@ -37,8 +38,8 @@ class DIV(implicit p: Parameters) extends CoreModule {
 
   // Assume control signal stalls until division is complete
   val start = io.ctrl =/= default
-  val signed = io.ctrl === DIV && io.ctrl === REM
-  val isRem = io.ctrl === REM && io.ctrl === REMU
+  val signed = io.ctrl === DIV || io.ctrl === REM
+  val isRem = io.ctrl === REM || io.ctrl === REMU
 
   val divisor = Mux(signed && io.B < 0.S, -io.B, io.B)
   val dividend = Mux(signed && io.A < 0.S, -io.A, io.A)
@@ -50,69 +51,76 @@ class DIV(implicit p: Parameters) extends CoreModule {
 
   io.res.valid := false.B
   io.res.bits := Mux(isRem, remainder, quotient).asUInt
-  // Special cases
-  when(io.B === 0.S) {
-    when(isRem) {
-      io.res.valid := true.B
-      io.res.bits := io.A.asUInt
-    }.otherwise {
-      io.res.valid := true.B
-      io.res.bits := (-1.S).asUInt
-    }
-  }.elsewhen(io.B === -1.S && io.A === (1 << (xLen-1)).S) {
-    when(io.ctrl === DIV) {
-      io.res.valid := true.B
-      io.res.bits := io.A.asUInt
-    }.elsewhen(io.ctrl === REM) {
-      io.res.valid := true.B
-      io.res.bits := 0.U
-    }
-  }.otherwise { // normal operation
-    switch(state) {
-      is(sIdle) {
-        io.res.valid := false.B
-        when(start) {
+
+  io.busy := false.B
+
+  switch(state) {
+    is(sIdle) {
+      io.res.valid := false.B
+      when(start) {
+        io.busy := true.B
+        // Special cases
+        when(io.B === 0.S) {
+          when(isRem) {
+            io.res.valid := true.B
+            io.res.bits := io.A.asUInt
+          }.otherwise {
+            io.res.valid := true.B
+            io.res.bits := MINUS_ONE
+          }
+          state := sDone
+        }.elsewhen(io.B === -1.S && io.A === (1 << (xLen - 1)).S) {
+          when(io.ctrl === DIV) {
+            io.res.valid := true.B
+            io.res.bits := io.A.asUInt
+          }.elsewhen(io.ctrl === REM) {
+            io.res.valid := true.B
+            io.res.bits := 0.U
+          }
+          state := sDone
+        }.otherwise {
           quotient := 0.S
           remainder := dividend
           state := sCompute
         }
       }
-      is(sCompute) {
-        io.res.valid := false.B
-        val shiftRemainder = (remainder << 1).asSInt | (dividend((xLen)-1)).asSInt
-        io.aluCtrl := ALUControlIE.SUB
-        io.aluA := shiftRemainder.asUInt
-        io.aluB := divisor.asUInt
+    }
+    is(sCompute) {
+      io.busy := true.B
+      io.res.valid := false.B
+      val shiftRemainder = ((remainder << 1).asSInt | (dividend((xLen)-1)).asSInt)(xLen-1,0).asSInt
+      io.aluCtrl := ALUControlIE.SUB
+      io.aluA := shiftRemainder.asUInt
+      io.aluB := divisor.asUInt
 
-        val subtractResult = io.aluR.asSInt
+      val subtractResult = io.aluR.asSInt
 
-        when(subtractResult((xLen-1)) === 0.U) {
-          remainder := subtractResult
-          quotient := (quotient << 1).asSInt | 1.S
-        }.otherwise {
-          remainder := shiftRemainder
-          quotient := (quotient << 1).asSInt
-        }
-        dividend << 1
-
-        when(dividend === 0.S) {
-          state := sDone
-        }
+      when(subtractResult((xLen-1)) === 0.U) {
+        remainder := subtractResult
+        quotient := (quotient << 1).asSInt | 1.S
+      }.otherwise {
+        remainder := shiftRemainder
+        quotient := (quotient << 1).asSInt
       }
+      dividend << 1
 
-      is(sDone) {
-        io.res.valid := true.B
-        when(!start) { // This will include stall signal by stalling decoder
-          when(signed && ((io.A < 0.S) =/= (io.B < 0.S))) {
-            quotient := -quotient
-          }
-          when(signed && io.A < 0.S) {
-            remainder := -remainder
-          }
-          state := sIdle
+      when(dividend === 0.S) {
+        state := sDone
+      }
+    }
+
+    is(sDone) {
+      io.res.valid := true.B
+      io.busy := false.B
+      when(!start) { // This will include stall signal by stalling decoder
+        when(signed && ((io.A < 0.S) =/= (io.B < 0.S))) {
+          quotient := -quotient
         }
+        when(signed && io.A < 0.S) {
+          remainder := -remainder
+        }
+        state := sIdle
       }
     }
   }
-  io.busy := state =/= sIdle
 }
