@@ -46,8 +46,6 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = false, hasFlush = true))
 
-  // When kill asserts, all previous requests are blown away
-  io.epm.kill := fq.flush
 
   val brCond = (io.ctrl === BR) & io.cnd
   val haltCond = (io.ctrl === HALT)
@@ -79,6 +77,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   val jump = brIE || jalIE || jalrIE
   io.jump := jump
 
+  // val brAddr = io.ie_pc + io.brOffset
   val brAddr = io.ie_pc + io.brOffset
   val jumpPC = Mux(brIE, brAddr, io.aluR)
 
@@ -153,38 +152,46 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   // Flush can occur only after when enq.start is enable, except for async exception
   // So maximum number of on-the-fly requests are 2 times of fetchqueueEntries
   // For exception(async exception), only 1 request will comes out
-//  val reqCounter = RegInit(0.U(log2Ceil(fetchqueueEntries * 2 - 1).W))
-//  val ignoreAck = RegInit(false.B)
-//  val ignoreAckWire = RegInit(false.B)
-//  when(io.epm.req && io.epm.ack) {
-//    reqCounter := reqCounter
-//  }.elsewhen(io.epm.req) {
-//    reqCounter := reqCounter + 1.U
-//  }.elsewhen(io.epm.ack) {
-//    reqCounter := reqCounter - 1.U
-//  }
-//
-//  ignoreAckWire := fq.flush && ignoreAck
-//  when(fq.flush) {
-//    ignoreAck := ignoreAckWire
-//  }.elsewhen(ignoreAck) {
-//    ignoreAck := reqCounter =/= 1.U
-//  }
 
+  // When kill asserts, all previous requests are blown away
+  val ignoreAck = RegInit(false.B)
+  if (useInstKill) {
+    io.epm.kill := fq.flush
+  } else if (!useInstKill) {
+      io.epm.kill := DontCare
+      val reqCounter = RegInit(0.U(log2Ceil(fetchqueueEntries * 2 - 1).W))
 
-//  when(fq.flush && !xcptReqOntheway) {
-//    reqCounter := reqCounter + (fetchqueueEntries - 1).U - fqCounter
-//    ignoreAck := true.B
-//  }
-//
-//  when(ignoreAck && io.epm.ack) {
-//    reqCounter := reqCounter - 1.U
-//  }
-//
-//  //  when(reqCounter === 0.U && ignoreAck) {
-//  when(reqCounter === 1.U && ignoreAck && io.epm.ack) {
-//    ignoreAck := false.B
-//  }
+      val ignoreAckWire = RegInit(false.B)
+      when(io.epm.req && io.epm.ack) {
+        reqCounter := reqCounter
+      }.elsewhen(io.epm.req) {
+        reqCounter := reqCounter + 1.U
+      }.elsewhen(io.epm.ack) {
+        reqCounter := reqCounter - 1.U
+      }
+
+      ignoreAckWire := fq.flush && ignoreAck
+      when(fq.flush) {
+        ignoreAck := ignoreAckWire
+      }.elsewhen(ignoreAck) {
+        ignoreAck := reqCounter =/= 1.U
+      }
+
+      when(fq.flush && !xcptReqOntheway) {
+        reqCounter := reqCounter + (fetchqueueEntries - 1).U - fqCounter
+        ignoreAck := true.B
+      }
+
+      when(ignoreAck && io.epm.ack) {
+        reqCounter := reqCounter - 1.U
+      }
+
+      //  when(reqCounter === 0.U && ignoreAck) {
+      when(reqCounter === 1.U && ignoreAck && io.epm.ack) {
+        ignoreAck := false.B
+      }
+  }
+
 
   // 4 bytes align
   io.epm.addr := fetchPC(31, 2) ## 0.U(2.W)
@@ -199,10 +206,10 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 //  fq.io.enq.start := io.epm.ack && !ignoreAck && fqNotFull// Suppose simultaneous ack and data response
   // FIXME: We already dealt with fqNotFull with fq requests, so maybe fqNotFull condition is not necessary
 //  fq.io.enq.valid := io.epm.ack && fqNotFull// Suppose simultaneous ack and data response
-  fq.io.enq.valid := io.epm.ack // Suppose simultaneous ack and data response
+  fq.io.enq.valid := io.epm.ack && !ignoreAck // Suppose simultaneous ack and data response
 
   // Issue
-  /* FIXME: RVC
+  /*
   Fetch queue will fetch fetchwidth. fetchqueue should store 2 bytes align
   Extended instruction will be issued: 32 bits
    */
