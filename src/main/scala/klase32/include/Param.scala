@@ -37,6 +37,7 @@ object param {
 
                                outstandingLoad: Int = 2,
                                fetchqueueEntries: Int = 4,
+                               useInstKill: Boolean = false,
 //                               fetchqueueEntries: Int = 2,
                                loadstorequeueEntries: Int = 4,
                                storeBufferEntries: Int = 2,
@@ -95,6 +96,7 @@ trait HasCoreParameters {
   def readportNum = coreParams.readportNum
   def writeportNum = coreParams.writeportNum
   def fetchqueueEntries = coreParams.fetchqueueEntries
+  def useInstKill: Boolean = coreParams.useInstKill
   def loadstorequeueEntries = coreParams.loadstorequeueEntries
   def storeBufferEntries = coreParams.storeBufferEntries
 
