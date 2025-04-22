@@ -3,82 +3,114 @@ package klase32
 import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
-import klase32.config._
+import klase32.include.config._
+import klase32.include.KLASE32AbstractClass._
 
 
 class Hazards(implicit p: Parameters) extends CoreModule {
   val io = IO(new Bundle{
     val rs1Valid = Input(Bool())
     val rs2Valid = Input(Bool())
-    val loadValid = Input(Bool())
+    val loadValidIE = Input(Bool())
+    val loadValidME = Input(Bool())
+    val loadDataValidME = Input(Bool())
 
     val rs1Addr = Input(UInt(regIdWidth.W)) // 19:15
     val rs2Addr = Input(UInt(regIdWidth.W)) // 24:20
     val rdAddrIE = Input(UInt(regIdWidth.W)) // 11:7, IE
     val rdAddrME = Input(UInt(regIdWidth.W)) // 11:7, ME
 
-    // val divAddr = Input(UInt(regIdWidth.W))
-    // val divBusy = Input(Bool())
-    // val divWnc = Input(Bool())
+    val loadFull = Input(Bool())
+    val loadAck = Input(Bool())
+
+     val divAddr = Input(UInt(regIdWidth.W))
+     val divBusy = Input(Bool())
+     val divWrite = Input(Bool())
 
     val stall = Output(Bool())
     val bypassRS1RD = Output(Bool())
     val bypassRS2RD = Output(Bool())
-    val ldKill = Output(Bool())
+    val ldNotWriteback = Output(Bool())
   }
   )
 
-  val RAWHWraw = false.B
-  // val read_after_divHWraw = Wire(Bool())
-  // val write_after_divHWwaw = Wire(Bool())
-  // val write_after_div_1HWwaw = Wire(Bool())
-  // val div_busyHWnoDep = Wire(Bool())
-  // val div_wpHWnoDep = Wire(Bool())
+  // Bypass
+  val loadRDUsingRS1 = io.loadDataValidME && io.rs1Valid && (io.rs1Addr === io.rdAddrME)
+  val loadRDUsingRS2 = io.loadDataValidME && io.rs2Valid && (io.rs2Addr === io.rdAddrME)
 
-  // io.stall := RAWHWraw || read_after_divHWraw || write_after_divHWwaw || write_after_div_1HWwaw || div_busyHWnoDep || div_wpHWnoDep
-  io.stall := RAWHWraw
+  // Stall
+  val loadRDUsingRD = io.loadValidME &&  (io.rdAddrIE === io.rdAddrME)
 
+  // Bypass
   // RS1 === Load RD
   // RS2 === Load RD
   io.bypassRS1RD := false.B
-  when(io.loadValid && io.rs1Valid && (io.rs1Addr === io.rdAddrME)) {
+  when(loadRDUsingRS1) {
     io.bypassRS1RD := true.B
   }
 
   io.bypassRS2RD := false.B
-  when (io.loadValid && io.rs2Valid && (io.rs2Addr === io.rdAddrME)) {
+  when (loadRDUsingRS2) {
     io.bypassRS2RD := true.B
   }
 
-  io.ldKill := false.B
+  // Do not writeback
+  io.ldNotWriteback := false.B
   // When using rd of load as next instruction's rd, ignore load
-  when(io.loadValid && (io.rdAddrIE === io.rdAddrME)) {
-    io.ldKill := true.B
+  when(loadRDUsingRD) {
+    io.ldNotWriteback := true.B
   }
-  // Bypass
 
+  // When load rd is used in rs1/rs2/rd of next instruction
+//    val RAWHWraw = RegInit(false.B)
+//  when(loadRDUsingRD || loadRDUsingRS1 || loadRDUsingRS2 || io.loadFull) {
+//    RAWHWraw := true.B
+//  }
+//  val RAWHWraw = WireInit(false.B)
+//  RAWHWraw := loadRDUsingRD || loadRDUsingRS1 || loadRDUsingRS2 || io.loadFull
+  //    when(io.loadValidME && (io.rdAddrME === io.rs1Addr || io.rdAddrME === io.rs2Addr)) {
+//      RAWHWraw := true.B
+//    }
+//    when(RAWHWraw && io.loadAck) {
+//      RAWHWraw := false.B
+//    }
+//  val RAWHWraw = WireInit(false.B)
+//  when(io.loadValidME && (io.rdAddrME === io.rs1Addr || io.rdAddrME === io.rs2Addr)) {
+//    RAWHWraw := !io.loadAck
+//  }
+//  val read_after_divHWraw = Wire(Bool())
+//   val write_after_divHWwaw = Wire(Bool())
+  // val write_after_div_1HWwaw = Wire(Bool())
+  // val div_busyHWnoDep = Wire(Bool())
+  // val div_wpHWnoDep = Wire(Bool())
 
-  // when(
-  //   (io.divBusy && io.ctrlIE(0) && (io.rs1Addr === io.divAddr)) ||
-  //   (io.divBusy && io.ctrlIE(8) && (io.rsdAddr === io.divAddr)) ||
-  //   (io.divBusy && io.ctrlIE(4) && (io.rs2Addr === io.divAddr)) ||
-  //   (io.divBusy && io.ctrlIE(9) && (0.U === io.divAddr))
-  //   (io.divBusy && io.ctrlIE(3) && (2.U === io.divAddr))
-  // ) {
-  //   read_after_divHWraw := 1.U
-  // }.otherwise {
-  //   read_after_divHWraw := 0.U
-  // }
+//  io.stall := RAWHWraw
+    io.stall := DontCare
+//  io.stall := RAWHWraw ||
+//    read_after_divHWraw ||
+//    write_after_divHWwaw
+//
+//
+//  when(
+//     (io.divBusy && (io.rs1Addr === io.divAddr)) ||
+//     (io.divBusy && (io.rs2Addr === io.divAddr))
+//   ) {
+//     read_after_divHWraw := true.B
+//   }.otherwise {
+//     read_after_divHWraw := false.B
+//   }
+//
+//   when(
+//     (io.divBusy && (io.rdAddrIE === io.divAddr))
+//   ) {
+//     write_after_divHWwaw := true.B
+//   }.otherwise {
+//     write_after_divHWwaw := false.B
+//   }
 
-  // when(
-  //   (io.divBusy && io.ctrlIE(10) && (io.rsdAddr === io.divAddr)) ||
-  //   (io.divBusy && io.ctrlIE(13) && (1.U === io.divAddr)) ||
-  //   (io.divBusy && io.ctrlIE(14) && (2.U === io.divAddr))
-  // ) {
-  //   write_after_divHWwaw := 1.U
-  // }.otherwise {
-  //   write_after_divHWwaw := 0.U
-  // }
+//  when(
+//    io.divBusy &&
+//  )
 
   // when(
   //   (io.divBusy && io.ctrlIE(15) && (io.rsdAddr === io.divAddr)) ||
