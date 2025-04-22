@@ -5,7 +5,8 @@ import chisel3.util._
 
 import chisel3.util.experimental.decode.
 {DecodeField, DecodePattern, BoolDecodeField, DecodeTable, TruthTable}
-import snitch.enums._
+import klase32.include.enums._
+import klase32.include.ControlSignal._
 
 
 /**
@@ -213,6 +214,13 @@ object SRetField extends InstBoolField {
   override def typeChecker = _.isInstanceOf[SRetProperty]
 }
 
+// for debugger
+case class DRetProperty(op: DRetIE.Type) extends InstProperty(op)
+object DRetField extends InstEnumField(DRetIE) {
+  override def name = "dret"
+  override def typeChecker: InstProperty => Boolean = _.isInstanceOf[DRetProperty]
+}
+
 case class FenceProperty(op: FenceEnableIE.Type) extends InstProperty(op)
 object FenceField extends InstEnumField(FenceEnableIE) {
   override def name = "fence"
@@ -233,7 +241,7 @@ object FlushTLBField extends InstBoolField {
 
 case class WFIProperty(op: WFIIE.Type) extends InstProperty(op)
 object WFIField extends InstEnumField(WFIIE) {
-  override def name = "wfi"
+  override def name = "wfiOut"
   override def typeChecker = _.isInstanceOf[WFIProperty]
 }
 
@@ -251,7 +259,7 @@ object AccUseRdField extends InstBoolField {
 
 case class AccValidProperty(op: Bool) extends InstProperty(op)
 object AccValidField extends InstBoolField {
-  override def name = "acc valid"
+  override def name = "acc start"
   override def typeChecker = _.isInstanceOf[AccValidProperty]
 }
 
@@ -272,13 +280,14 @@ case class OpCompProperty(a: OperandType.Type, b: OperandType.Type) extends Inst
 
 case class AluCompProperty(alu: ALUControlIE.Type, a: OperandType.Type, b: OperandType.Type) extends InstProperty(
   AluProperty(alu) ++
-    OpCompProperty(a, b) ++
-    W0WritebackProperty(W0WritebackIE.EN)
+  OpCompProperty(a, b) ++
+  W0WritebackProperty(W0WritebackIE.EN)
 )
 
 case class BranchCompProperty(alu: ALUControlIE.Type) extends InstProperty(
-  AluCompProperty(alu, OperandType.Reg, OperandType.Reg) ++
-    CtrlControlIEProperty(FrontendControlIE.BR)
+  AluProperty(alu) ++
+  OpCompProperty(OperandType.Reg, OperandType.Reg) ++
+  CtrlControlIEProperty(FrontendControlIE.BR)
   //    RS2NotALUBProperty(RS2NotALUBIE.EN)
 )
 
@@ -323,7 +332,7 @@ abstract trait InstDecode {
 }
 
 object RV32IDecode extends InstDecode {
-  import klase32.Instructions._
+  import klase32.include.Instructions._
 
   override val table = Seq(
     new InstPattern(ADD, AluCompProperty(ALUControlIE.ADD, OperandType.Reg, OperandType.Reg)),
@@ -346,7 +355,7 @@ object RV32IDecode extends InstDecode {
     new InstPattern(SRA, AluCompProperty(ALUControlIE.SRA, OperandType.Reg, OperandType.Reg)),
     new InstPattern(SRAI, AluCompProperty(ALUControlIE.SRA, OperandType.Reg, OperandType.IImmediate)),
 
-    new InstPattern(LUI, AluCompProperty(ALUControlIE.ADD, OperandType.Reg, OperandType.UImmediate)),
+    new InstPattern(LUI, AluCompProperty(ALUControlIE.ADD, OperandType.None, OperandType.UImmediate)),
     new InstPattern(AUIPC, AluCompProperty(ALUControlIE.ADD, OperandType.PC, OperandType.UImmediate)),
 
     new InstPattern(JAL,
@@ -384,6 +393,7 @@ object RV32IDecode extends InstDecode {
     new InstPattern(LBU, LoadCompProperty(DataSize.Byte, SignedControl.unsigned)),
     new InstPattern(LHU, LoadCompProperty(DataSize.HalfWord, SignedControl.unsigned)),
 
+    // FIXME: CSR does not need to use alu
     new InstPattern(CSRRW,
       AluProperty(ALUControlIE.ADD) ++
         OpCompProperty(OperandType.Reg, OperandType.None) ++
@@ -434,6 +444,9 @@ object RV32IDecode extends InstDecode {
       ++ SRetProperty(true.B)),
     new InstPattern(MRET, RetCompProperty(FrontendControlIE.MRET)
       ++ MRetProperty(MRetIE.EN)),
+    // for debugger
+    new InstPattern(DRET, RetCompProperty(FrontendControlIE.DRET)
+      ++ DRetProperty(DRetIE.EN)),
 
     new InstPattern(FENCE,
       W0WritebackProperty(W0WritebackIE.EN) ++
@@ -458,7 +471,7 @@ case class AmoCompProperty(amo: AMOType.Type) extends InstProperty(
 )
 
 object RV32ADecode extends InstDecode {
-  import klase32.Instructions._
+  import klase32.include.Instructions._
 
   override val table = Seq(
     AMOADD_W  -> AMOType.Add,
@@ -517,7 +530,7 @@ case class DIVCtrlProperty(op: DIVControlIE.Type) extends InstProperty(
 
 object RV32MDecode extends InstDecode {
 
-  import klase32.Instructions._
+  import klase32.include.Instructions._
 
   override val table = Seq(
     new InstPattern(MUL, MPYCtrlProperty(MPYControlIE.MUL)),
