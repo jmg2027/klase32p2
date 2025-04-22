@@ -1,12 +1,14 @@
-package klase32
+package klase32.include
 
 import chisel3._
 import chisel3.experimental.BundleLiterals._
 import chisel3.util._
-import klase32.config._
-import klase32.param._
-import snitch.enums._
+import klase32.include.config.Parameters
+import klase32.include.param.KLASE32ParamKey
+import klase32.include.enums._
+import klase32.include.KLASE32AbstractClass._
 import freechips.rocketchip.util._
+import klase32.include.ControlSignal._
 
 object Acc {
  class Request(implicit p: Parameters) extends Bundle {
@@ -38,6 +40,7 @@ class Interrupt extends Bundle {
  val e = Bool() // external
  val t = Bool() // timer
  val s = Bool() // software
+ val d = Bool() // debug
 
  def &(op: Interrupt) = {
   val ret = Wire(new Interrupt())
@@ -69,14 +72,14 @@ class StallBundle extends Bundle {
 
 class Stall extends StallBundle {
  val ie = new StallBundle {
-  val issue = Bool()
-  val store = Bool()
-  val csr = Bool()
-  val div = Bool()
+  val storeFull = Bool()
   val mpy = Bool()
+  val div = Bool()
+  val xcpt = Bool()
+  val loadUseWriteBack = Bool()
  }
  val me = new StallBundle {
-  val load = Bool()
+  val loadFull = Bool()
   val hzd = Bool()
   val fence = Bool()
   val wfi = Bool()
@@ -94,12 +97,14 @@ class Flush extends FlushBundle {
   val fence = Bool()
   val xcpt = Bool()
   val eret = Bool()
+  val wfi = Bool()
+  val dbgFire = Bool()
  }
  // val me = new FlushBundle {
  //  val load = Bool()
  //  val hzd = Bool()
  //  val fence = Bool()
- //  val wfi = Bool()
+ //  val wfiOut = Bool()
  // }
 }
 
@@ -151,8 +156,10 @@ class InstructionPacket(implicit p: Parameters) extends CoreBundle {
 class FetchQueueEntry(implicit p: Parameters) extends CoreBundle {
  val k = p(KLASE32ParamKey)
 
+ val pc = UInt(k.vaddrBits.W)
  val data = UInt(k.fetchBits.W)
  val xcpt = new HeartXcpt
+ val rvc = Bool()
 }
 
 
@@ -162,7 +169,6 @@ class StoreBufferEntry(implicit p: Parameters) extends CoreBundle {
   val addr = UInt(k.vaddrBits.W)
   val data = UInt(xLen.W)
   val mask = UInt((wordsize/8).W)
- val valid = Bool()
 }
 
 class EdmIntf(implicit p: Parameters) extends CoreBundle {
