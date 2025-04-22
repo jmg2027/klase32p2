@@ -5,10 +5,13 @@ import chisel3.util.BitPat
 import chisel3.util._
 import chisel3.util.experimental.decode.{DecodeField, DecodePattern, DecodeTable}
 import chisel3.experimental.BundleLiterals._
-import klase32.config._
-import klase32.param.KLASE32ParamKey
-import klase32.Instructions._
-import snitch.enums._
+import klase32.include.KLASE32AbstractClass._
+import klase32.include.config._
+import klase32.include.param.KLASE32ParamKey
+import klase32.include.Instructions._
+import klase32.include.enums._
+import klase32.include.ControlSignal._
+import klase32.include.LSUControl
 
 
 class Decoded(implicit p: Parameters) extends CoreBundle {
@@ -46,6 +49,9 @@ class Decoded(implicit p: Parameters) extends CoreBundle {
   val ecall = EcallIE()
   val ebreak = EbreakIE()
   val mret = MRetIE()
+
+  // for debugger
+  val dret = DRetIE()
 
   val fence = FenceEnableIE()
   val flushICache = IcacheFlushIE()
@@ -92,6 +98,8 @@ class Decoder(implicit p: Parameters) extends CoreModule {
     ECallField -> d.ecall,
     EBreakField -> d.ebreak,
     MRetField -> d.mret,
+    // for debugger
+    DRetField -> d.dret,
 
     FenceField -> d.fence,
     FlushICacheField -> d.flushICache,
