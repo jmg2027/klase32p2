@@ -2,7 +2,9 @@ package klase32
 
 import chisel3._
 import chisel3.util._
-import klase32.config._
+import klase32.include.KLASE32AbstractClass._
+import klase32.include.ControlSignal._
+import klase32.include.config._
 
 
 class ALU(implicit p: Parameters) extends CoreModule with HasCoreParameters {
