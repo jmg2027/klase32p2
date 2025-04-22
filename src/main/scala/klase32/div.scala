@@ -3,9 +3,10 @@ package klase32
 import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
-import klase32.config._
-import klase32.param.KLASE32ParamKey
-// import klase32.interface._
+import klase32.include.config._
+import klase32.include.ControlSignal._
+import klase32.include.KLASE32AbstractClass._
+import klase32.include.param.KLASE32ParamKey
 
 
 class DIV(implicit p: Parameters) extends CoreModule {
@@ -19,12 +20,6 @@ class DIV(implicit p: Parameters) extends CoreModule {
       val B = Input(SInt(xLen.W))
       val res = Valid(Output(UInt(xLen.W)))
 
-      // Subtract operations are performed in the ALU
-      val aluCtrl = Output(ALUControlIE())
-      val aluA = Output(UInt(xLen.W))
-      val aluB = Output(UInt(xLen.W))
-      val aluR = Input(UInt(xLen.W))
-
       val busy = Output(Bool())
     }
   )
@@ -33,24 +28,23 @@ class DIV(implicit p: Parameters) extends CoreModule {
   val sIdle :: sCompute :: sDone :: Nil = Enum(3)
   val state = RegInit(sIdle)
 
-  val quotient = RegInit(0.S(xLen.W))
-  val remainder = RegInit(0.S(xLen.W))
+  val counter = RegInit(0.U(log2Ceil(xLen+1).W))
+
+//  val shiftRemainder = RegInit(0.S((2*xLen+1).W))
+  val shiftRemainder = Reg(UInt((2*xLen+1).W))
+
 
   // Assume control signal stalls until division is complete
   val start = io.ctrl =/= default
   val signed = io.ctrl === DIV || io.ctrl === REM
   val isRem = io.ctrl === REM || io.ctrl === REMU
 
-  val divisor = Mux(signed && io.B < 0.S, -io.B, io.B)
-  val dividend = Mux(signed && io.A < 0.S, -io.A, io.A)
+  val divisor = Mux(signed && io.B < 0.S, -io.B, io.B).asUInt
+  val dividend = Mux(signed && io.A < 0.S, -io.A, io.A).asUInt
 
   // Initialize IO
-  io.aluCtrl := ALUControlIE.default
-  io.aluA := 0.U
-  io.aluB := 0.U
-
   io.res.valid := false.B
-  io.res.bits := Mux(isRem, remainder, quotient).asUInt
+  io.res.bits := 0.U
 
   io.busy := false.B
 
@@ -78,49 +72,70 @@ class DIV(implicit p: Parameters) extends CoreModule {
             io.res.bits := 0.U
           }
           state := sDone
+//        }.elsewhen(signed) {
+//          state := sNeg
         }.otherwise {
-          quotient := 0.S
-          remainder := dividend
+          shiftRemainder := Cat(0.U(xLen.W), dividend)
           state := sCompute
         }
       }
     }
+//    is(sNeg) {
+//      when(shiftRemainder(xLen-1)) {
+//        shiftRemainder := -shiftRemainder
+//      }
+//      when(divisor(xLen-1)) {
+//        divisor := shiftRemainder(2*xLen, xLen) - divisor
+//      }
+//      state := sCompute
+//    }
     is(sCompute) {
       io.busy := true.B
       io.res.valid := false.B
-      val shiftRemainder = ((remainder << 1).asSInt | (dividend((xLen)-1)).asSInt)(xLen-1,0).asSInt
-      io.aluCtrl := ALUControlIE.SUB
-      io.aluA := shiftRemainder.asUInt
-      io.aluB := divisor.asUInt
+      counter := counter + 1.U
 
-      val subtractResult = io.aluR.asSInt
+      val subtractResult = shiftRemainder(2*xLen, xLen) - divisor
 
-      when(subtractResult((xLen-1)) === 0.U) {
-        remainder := subtractResult
-        quotient := (quotient << 1).asSInt | 1.S
-      }.otherwise {
-        remainder := shiftRemainder
-        quotient := (quotient << 1).asSInt
-      }
-      dividend << 1
+      val neg = subtractResult(xLen)
+      shiftRemainder := Cat(Mux(neg, shiftRemainder(2*xLen-1, xLen), subtractResult(xLen-1, 0)), shiftRemainder(xLen-1, 0), !neg)
+//
+//      when(subtractResult((xLen-1)) === 0.U) {
+//        shiftRemainder := ((subtractResult ## shiftRemainder(xLen-1, 0).asSInt).asSInt) | 1.S
+////        shiftRemainder := (shiftRemainder << 1) | 1.S
+////        shiftRemainder := shiftRemainder | 1.S
+//      }.otherwise {
+//        shiftRemainder := shiftRemainder << 1
+//      }
 
-      when(dividend === 0.S) {
+      when(counter === (xLen).U) {
         state := sDone
       }
     }
 
     is(sDone) {
+      counter := 0.U
       io.res.valid := true.B
       io.busy := false.B
-      when(!start) { // This will include stall signal by stalling decoder
-        when(signed && ((io.A < 0.S) =/= (io.B < 0.S))) {
-          quotient := -quotient
-        }
-        when(signed && io.A < 0.S) {
-          remainder := -remainder
-        }
-        state := sIdle
+      val quotient = WireInit(0.U(xLen.W))
+      val remainder = WireInit(0.U(xLen.W))
+//      when(!start) { // This will include stall signal by stalling decoder
+      when(signed && ((io.A < 0.S) =/= (io.B < 0.S))) {
+        quotient := -shiftRemainder(xLen-1, 0)
+//          quotient := -quotient
+//          shiftRemainder(xLen-1, 0) := -shiftRemainder(xLen-1, 0)
+      }.otherwise {
+        quotient := shiftRemainder(xLen-1, 0)
       }
+      when(signed && io.A < 0.S) {
+        remainder := -shiftRemainder(2*xLen, xLen+1)
+//          shiftRemainder(2*xLen-1, xLen) := -shiftRemainder(2*xLen-1, xLen)
+//          remainder := -remainder
+      }.otherwise {
+        remainder := shiftRemainder(2*xLen, xLen+1)
+      }
+      io.res.bits := Mux(isRem, remainder, quotient).asUInt
+      state := sIdle
+//      }
     }
   }
 }
