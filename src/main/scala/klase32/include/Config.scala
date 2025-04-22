@@ -1,6 +1,6 @@
 // From d.hyun.ahn snitch
 
-package klase32
+package klase32.include
 
 object config {
   abstract class Field[T] private (val default: Option[T])
