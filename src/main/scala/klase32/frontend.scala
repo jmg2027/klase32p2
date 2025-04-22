@@ -2,37 +2,170 @@ package klase32
 
 import chisel3._
 import chisel3.util._
+import chisel3.util.BitPat._
 import chisel3.experimental.BundleLiterals._
-import klase32.config._
-import klase32.param.KLASE32ParamKey
+import klase32.include.config._
+import klase32.include.param.KLASE32ParamKey
+import klase32.include.ControlSignal._
+import klase32.include.KLASE32AbstractClass._
+import klase32.include.{Flush, EpmIntf, InstructionPacket, FetchQueueEntry, HeartXcpt}
+import freechips.rocketchip.rocket.RVCDecoder
 
 class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
   val ctrl = Input(FrontendControlIE())
 
-  val if_pc = Output(UInt(mxLen.W)) // Current PC
   val evec = Input(UInt(mxLen.W))
   val cnd = Input(Bool())
   val exception = Input(Bool())
   val eret = Input(Bool())
+  // for debugger
+  val dbgFire = Input(Bool())
+  val regDbgMode = Input(Bool())
+  val ebreak = Input(Bool())
+  val dret = Input(Bool())
+  val dpc = Input(UInt(mxLen.W))
 
   val stall = Input(Bool())
+  val wfiOut = Input(Bool())
   val wfi = Input(Bool())
+
+  val hartEn = Input(Bool())
 
   val aluR = Input(UInt(mxLen.W))
   val ie_pc = Input(UInt(mxLen.W))
   val brOffset = Input(UInt(13.W))
 
-//  val instPacket = Output(new Bundle {
-//    val inst = UInt(wordsize.W)
-//    val xcpt = new HeartXcpt
-//  }) // IF stage
-  val instPacket = Decoupled(new InstructionPacket())
+  val fetchedPacket = Output(ValidIO(new FetchQueueEntry()))
+  val instRaw = Output(UInt(32.W))
 
   val flushFetchQueue = Input(new Flush())
   val flushIcache = Input(IcacheFlushIE())
   val jump = Output(Bool())
 
   val epm = new EpmIntf
+
+  val regBooting = Output(Bool())
+  val bootAddr = Output(UInt(mxLen.W))
+}
+
+
+// It can be optimized.
+// You can fit entry size rather than fix it to 8 for log2 value.
+// And you can decrease entry size by share allocate space and dequeue space.
+// Maybe You can set entry size to 5(prefetchReq size * 2 + 1) for 2 mo after optimization.
+class FetchQueue(entries: Int = 8, reqSize: Int = 2) extends Module {
+  val indexWidth = log2Ceil(entries)
+  val reqSizeBit = log2Ceil(reqSize)
+  val mask = entries - 1
+
+  val io = IO(new Bundle {
+    val flush = Input(Bool())
+    val allocate = Input(Bool())
+    val allocSize = Input(UInt(reqSizeBit.W)) // Actual size is allocSize + 1
+    val allocateSucceed = Output(Bool())
+
+    val enq = Input(Bool())
+    val enqData = Input(UInt((reqSize * 16).W))
+    val enqSize = Input(UInt(reqSizeBit.W)) // Actual size is enqSize + 1
+    val enqXcpt = Input(new HeartXcpt())
+
+    val canDeq = Output(Bool())
+    val deq = Input(Bool())
+    val deqData = Output(UInt((reqSize * 16).W))
+    val deqXcpt = Output(new HeartXcpt())
+
+    val hasXcpt = Output(Bool())
+    val inflightCount = Output(UInt((indexWidth - reqSizeBit).W))
+    val empty = Output(Bool())
+
+    val ack = Input(Bool())
+  })
+
+  val first = RegInit(0.U(indexWidth.W))
+  val last = RegInit(0.U(indexWidth.W))
+  val req = RegInit(0.U(indexWidth.W))
+
+//  val mem = Mem(entries, UInt(16.W))
+  val mem = Reg(Vec(entries, UInt(16.W)))
+  val noXcptLit = (new HeartXcpt).Lit(
+    _.loc -> false.B,
+    _.ma -> false.B,
+    _.pf -> false.B,
+    _.gf -> false.B,
+    _.ae -> false.B,
+  )
+  val xcpt = RegInit(noXcptLit)
+  val xcptPtr = RegInit(0.U(indexWidth.W))
+
+  io.hasXcpt := xcpt.asUInt.orR
+  // io.inflightCount := indexDiff(req, last) >> reqSizeBit.U
+  io.empty := first === req
+
+  when (io.flush) {
+    last := 0.U
+  }
+  io.allocateSucceed := false.B
+
+  // Max size is entries - 1
+  val remainSize = (entries-1).U - (last - first)
+  when (io.allocate) {
+    when (io.flush) {
+      last := io.allocSize +& 1.U
+      io.allocateSucceed := true.B
+    }.elsewhen(io.allocSize < remainSize) {
+      last := last + io.allocSize +& 1.U
+      io.allocateSucceed := true.B
+    }
+  }
+
+  val inflightCount = RegInit(0.U(indexWidth.W))
+
+  when (io.flush) {
+    inflightCount := io.allocateSucceed.asUInt
+  }.elsewhen(io.allocateSucceed ^ io.ack) {
+    when(io.allocateSucceed) {
+      inflightCount := inflightCount + 1.U
+    }
+    when(io.ack) {
+      inflightCount := inflightCount - 1.U
+    }
+  }
+
+  io.inflightCount := inflightCount
+
+  when (io.enq) {
+    xcpt := io.enqXcpt
+    xcptPtr := req
+    Seq.tabulate(reqSize) { i=>
+      when (io.enqSize >= i.U) {
+        mem(req + i.U) := io.enqData(16*(i+1) - 1, 16 * i)
+      }
+    }
+    req := req + io.enqSize +& 1.U
+  }
+  when (io.flush) {
+    req := 0.U
+    xcpt := noXcptLit
+    xcptPtr := 0.U
+  }
+
+  val ready = req - first
+  when (ready >= 2.U) {
+    io.canDeq := true.B
+  }.elsewhen (ready === 1.U) {
+    io.canDeq := mem(first)(1, 0) =/= "b11".U
+  }.otherwise {
+    io.canDeq := false.B
+  }
+
+  io.deqData := mem(first+1.U) ## mem(first)
+  io.deqXcpt := Mux(first === xcptPtr || (first+1.U) === xcptPtr, xcpt, noXcptLit)
+  when (io.deq) {
+    first := first + Mux(io.deqData(1, 0) === "b11".U, 2.U, 1.U)
+  }
+  when (io.flush) {
+    first := 0.U
+  }
 }
 
 
@@ -41,231 +174,210 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   import FrontendControlIE._
 
   val k = p(KLASE32ParamKey)
+  val NOP = BitPat("b00000000000000000000000000010011")
 
   val io = IO(new FrontendIO())
 
-  val fq = Module(new Queue(new FetchQueueEntry, fetchqueueEntries, flow = false, hasFlush = true))
+  // After n cycle prefetchReq will start
+  val regBooting = RegInit(true.B)
 
+  val bootingCycle = 2 // booting cycle
+  if (bootingCycle > 0) {
+    val bootingCounter = RegInit(bootingCycle.U)
+    bootingCounter := Mux(io.hartEn && regBooting, bootingCounter - 1.U, bootingCounter)
+    regBooting := regBooting && bootingCounter =/= 0.U
+  } else {
+    when (io.hartEn && regBooting) {
+      regBooting := false.B
+    }
+  }
+  io.regBooting := regBooting
 
+  val bootAddr = if (usingOuterBootAddr) io.epm.bootAddr else bootAddrParam.U
+  io.bootAddr := bootAddr
+
+  // Next PC
   val brCond = (io.ctrl === BR) & io.cnd
   val haltCond = (io.ctrl === HALT)
   val jalCond = (io.ctrl === JAL)
-  val jalrCond = (io.ctrl === JALR) | (io.ctrl === MRET)
-
-  // After n cycle fetch will start
-  val n = 1 // booting cycle
-  val bootingCounter = RegInit(0.U(log2Ceil(n).W))
-  val regBooting = RegInit(true.B)
-  when(reset.asBool) {
-    regBooting := true.B
-    bootingCounter := 0.U
-  }.elsewhen(regBooting && bootingCounter === (n - 1).U) {
-    regBooting := false.B
-  }.elsewhen(regBooting) {
-    bootingCounter := bootingCounter + 1.U
-  }
-
-  val bootAddrWire = WireDefault(bootAddrParam.U)
-  if (usingOuterBootAddr) {
-    bootAddrWire := io.epm.bootAddr
-  }
-
-  // Next PC
-  val brIE = brCond && !io.stall
-  val jalIE = jalCond && !io.stall
-  val jalrIE = jalrCond && !io.stall
-  val jump = brIE || jalIE || jalrIE
+//  val jalrCond = (io.ctrl === JALR) | (io.ctrl === MRET) | (io.ctrl === DRET)
+  val jalrCond = (io.ctrl === JALR)
+  val jump = !io.stall && (brCond || jalCond || jalrCond)
   io.jump := jump
 
-  // val brAddr = io.ie_pc + io.brOffset
-  val brAddr = io.ie_pc + io.brOffset
-  val jumpPC = Mux(brIE, brAddr, io.aluR)
+  val sextBrOffset = Fill(xLen-13, io.brOffset(12)) ## io.brOffset
+  val brAddr = io.ie_pc + sextBrOffset
+  val jumpPC = Mux(brCond, brAddr, io.aluR)
 
-  // Fetch
-  // Fetch Queue
-  // FIXME: Check for flow in jump
+  val dbgFire = io.dbgFire
+  val dbgReturn = io.regDbgMode && io.dret
+  val dbgBreak = io.regDbgMode && io.ebreak
+  val dbgException = io.regDbgMode && io.exception
+  val exception = io.exception || io.eret
+  val csrInst = io.flushFetchQueue.ie.csr.orR
+  val wfi = io.wfi
 
-  // Fetch counter
-  val fqCounter = withReset(reset.asBool || fq.flush) { RegInit((fetchqueueEntries - 1).U) }
+  // To ease timing issue, those are not in normal program flow is delayed
+  // When mispredict, flush
+  // When it was correct prediction, do not flush
+  // But both should jump current cycle
+  val jumpNextCycle =
+    dbgFire ||
+      dbgReturn ||
+      dbgBreak ||
+      dbgException ||
+      exception
 
-  when (fq.io.enq.fire && fq.io.deq.fire) {
-    fqCounter := fqCounter
-  }.elsewhen (fq.io.enq.fire) {
-    fqCounter := fqCounter - 1.U
-  }.elsewhen (fq.io.deq.fire) {
-    fqCounter := fqCounter + 1.U
-  }
-  val fqNotFull = fqCounter =/= 0.U
-
-  // When exception happens, only 1 request can go out
-  val xcptReqOntheway = RegInit(false.B)
-  when (io.epm.req && io.exception && !regBooting) {
-    xcptReqOntheway := true.B
-  }
-  when(io.epm.ack && xcptReqOntheway) {
-    xcptReqOntheway := false.B
-  }
+  val regJumpNextCycle = RegNext(jumpNextCycle)
+  val jumpCurrentCycle =
+    jump ||
+      csrInst ||
+      wfi
 
   // Flush fetch queue
-  fq.flush := io.flushFetchQueue.ie.xcpt ||
-    io.flushFetchQueue.ie.jump ||
-    io.flushFetchQueue.ie.eret ||
-    io.flushFetchQueue.ie.csr
-  // Fence does not flush fetch queue
-  // fq.flush := io.flushFetchQueue.orR
+//  val flush = !io.stall && (io.flushFetchQueue.ie.xcpt ||
+  val flush = io.flushFetchQueue.ie.jump ||
+    io.flushFetchQueue.ie.csr ||
+    io.flushFetchQueue.ie.wfi ||
+    io.flushFetchQueue.ie.xcpt ||
+      io.flushFetchQueue.ie.eret ||
+      io.ebreak ||
+      io.dbgFire
 
-  val fetch = fqNotFull && !regBooting && !xcptReqOntheway && !io.wfi
+  val nextPrefetchAddr = RegInit(bootAddr)
+  //  val targetAddr = WireInit(nextPrefetchAddr)
+  val targetAddr = Wire(UInt(k.vaddrBits.W))
+  val nextTargetAddr = Reg(UInt(k.vaddrBits.W))
 
-  // Fetch PC
-  val fetchPC = Reg(UInt(mxLen.W))
+  val fq = Module(new FetchQueue())
+  fq.io.flush := flush
+//  when(jumpNextCycle) {
+//    fq.io.flush := regFlush
+//  }.otherwise {
+//    fq.io.flush := flush
+//  }
 
-  printf(cf"[FE] exception: ${io.exception}\n")
-  printf(cf"[FE] evec: ${io.evec}%x\n")
-  when(regBooting) {
-    fetchPC := bootAddrWire
-  }.elsewhen(io.exception || io.eret) {
-    fetchPC := io.evec
-  }.elsewhen(jump) {
-    fetchPC := jumpPC
-  }.elsewhen(io.flushFetchQueue.ie.csr.orR) {
-    fetchPC := io.ie_pc + 4.U
-  }.elsewhen(fetch) {
-    fetchPC := fetchPC + 4.U
+  // All exceptions are handled in IE stage
+//  fq.io.allocate := !regBooting && !io.wfiOut && !fq.io.hasXcpt
+  // If current control is 1 cycle fetch such as exception, do not request in 0 cycle
+//  fq.io.allocate := !regBooting && !io.wfiOut && !(flush && jumpNextCycle)
+  fq.io.allocate := !regBooting && !io.wfiOut
+  fq.io.allocSize := Mux(targetAddr(1,0) =/= 0.U, 0.U, 1.U)
+
+  val prefetchReq = fq.io.allocateSucceed
+  val prefetchAddr = targetAddr(31, 2) ## 0.U(2.W)
+  when (prefetchReq) {
+    nextPrefetchAddr := prefetchAddr + (k.fetchWidth * 4).U
+  }
+
+  when(dbgFire) {
+    nextTargetAddr := debugAddrParam.U
+  }.elsewhen(dbgReturn) {
+    nextTargetAddr := io.dpc
+  }.elsewhen(dbgBreak) {
+    nextTargetAddr := debugAddrParam.U
+  }.elsewhen(dbgException) {
+    nextTargetAddr := debugExceptionAddrParam.U
+  }.elsewhen(exception) {
+    nextTargetAddr := io.evec
   }.otherwise {
-    fetchPC := fetchPC
-  }
-  //}.elsewhen(!fetch) {
-  ////    fetch := false.B
-  //    fetchPC := fetchPC
-  //    fq.flush := false.B
-  //    // FIXME: Does this not needed?
-  //  }.otherwise {
-  ////    fetch := fq.io.enq.ready
-  ////    fetch := true.B
-  //    fetchPC := fetchPC + 4.U
-  //    fq.flush := false.B
-  //  }
-
-  // FIXME: Used kill signal for this
-  // When flush, ignore acks for on-the-fly reqs
-  // All requests recieve ack so overflow should not happen
-  // Flush can occur only after when enq.start is enable, except for async exception
-  // So maximum number of on-the-fly requests are 2 times of fetchqueueEntries
-  // For exception(async exception), only 1 request will comes out
-
-  // When kill asserts, all previous requests are blown away
-  val ignoreAck = RegInit(false.B)
-  if (useInstKill) {
-    io.epm.kill := fq.flush
-  } else if (!useInstKill) {
-      io.epm.kill := DontCare
-      val reqCounter = RegInit(0.U(log2Ceil(fetchqueueEntries * 2 - 1).W))
-
-      val ignoreAckWire = RegInit(false.B)
-      when(io.epm.req && io.epm.ack) {
-        reqCounter := reqCounter
-      }.elsewhen(io.epm.req) {
-        reqCounter := reqCounter + 1.U
-      }.elsewhen(io.epm.ack) {
-        reqCounter := reqCounter - 1.U
-      }
-
-      ignoreAckWire := fq.flush && ignoreAck
-      when(fq.flush) {
-        ignoreAck := ignoreAckWire
-      }.elsewhen(ignoreAck) {
-        ignoreAck := reqCounter =/= 1.U
-      }
-
-      when(fq.flush && !xcptReqOntheway) {
-        reqCounter := reqCounter + (fetchqueueEntries - 1).U - fqCounter
-        ignoreAck := true.B
-      }
-
-      when(ignoreAck && io.epm.ack) {
-        reqCounter := reqCounter - 1.U
-      }
-
-      //  when(reqCounter === 0.U && ignoreAck) {
-      when(reqCounter === 1.U && ignoreAck && io.epm.ack) {
-        ignoreAck := false.B
-      }
+    nextTargetAddr := nextTargetAddr
   }
 
+  when(regJumpNextCycle) {
+    targetAddr := nextTargetAddr
+  }.elsewhen(jump) {
+    targetAddr := jumpPC
+  }.elsewhen(io.flushFetchQueue.ie.csr.orR || io.wfi) {
+    targetAddr := io.ie_pc + 4.U
+  }.otherwise {
+    targetAddr := nextPrefetchAddr
+  }
+
+//  when(io.dbgFire) {
+//    targetAddr := debugAddrParam.U
+//  }.elsewhen(io.regDbgMode && io.dret) {
+//    targetAddr := io.dpc
+//  }.elsewhen(io.regDbgMode && io.ebreak) {
+//    targetAddr := debugAddrParam.U
+//  }.elsewhen(io.regDbgMode && io.exception) {
+//    targetAddr := debugExceptionAddrParam.U
+//  }.elsewhen(io.exception || io.eret) {
+//    targetAddr := io.evec
+//  }.elsewhen(jump) {
+//    targetAddr := jumpPC
+//  }.elsewhen(io.flushFetchQueue.ie.csr.orR || io.wfi) {
+//    targetAddr := io.ie_pc + 4.U
+//  }.otherwise {
+//    targetAddr := nextPrefetchAddr
+//  }
 
   // 4 bytes align
-  io.epm.addr := fetchPC(31, 2) ## 0.U(2.W)
+  io.epm.addr := prefetchAddr
   // printf(cf"[FE] fetchPC: 0x${io.epm.addr}%x\n")
-  io.epm.req := fetch
+  io.epm.req := prefetchReq
   // FIXME: Should be handled in the future
   io.epm.flush := io.flushIcache.asUInt.orR
   io.epm.cmd := 0.U // int load
+  io.epm.kill := 0.U
 
-  fq.io.enq.bits.data := io.epm.data
-  fq.io.enq.bits.xcpt := io.epm.xcpt
-//  fq.io.enq.start := io.epm.ack && !ignoreAck && fqNotFull// Suppose simultaneous ack and data response
-  // FIXME: We already dealt with fqNotFull with fq requests, so maybe fqNotFull condition is not necessary
-//  fq.io.enq.valid := io.epm.ack && fqNotFull// Suppose simultaneous ack and data response
-  fq.io.enq.valid := io.epm.ack && !ignoreAck // Suppose simultaneous ack and data response
+  val curPC = RegInit(bootAddr)
 
-  // Issue
-  /*
-  Fetch queue will fetch fetchwidth. fetchqueue should store 2 bytes align
-  Extended instruction will be issued: 32 bits
-   */
-//  val instrAvail = fq.io.deq.start && !regBooting && !ignoreAckWire && !ignoreAck
-  val instrAvail = fq.io.deq.valid && !regBooting
-  // When fq being flushed, NOP is issued(1 cycle stall)
-//  val issue = instrAvail && !io.stall
-  val issue = instrAvail && !io.stall
+  fq.io.deq := !io.stall && fq.io.canDeq
+  val instRvc = fq.io.deqData(1, 0) =/= "b11".U
+//  val rvcExpanded = new RVCDecoder(fq.io.deqData, xLen = xLen, useAddiForMv = false).decode.bits
+  // To prevent unnecessary power consumption of rvc decoder
+  val rvcExpanded = new RVCDecoder(Mux(instRvc, 0.U(16.W) ## fq.io.deqData(15,0), 0.U), xLen = xLen, useAddiForMv = false).decode.bits
+  val instData = Mux(instRvc, rvcExpanded, fq.io.deqData)
 
-//  val instIF = fq.io.deq.bits.data
-//  val xcptIF = fq.io.deq.bits.xcpt
+  val fetchedPacket = Wire(Valid(new FetchQueueEntry()))
+  fetchedPacket.valid := fq.io.deq
+  fetchedPacket.bits.pc := curPC
 
-
-  //  val pcWrite = Wire(UInt())
-//  val pcWrite = RegInit(bootAddrWire)
-
-  // PC Register
-  // Address of current instruction in IF stage
-  // val pcReg = RegEnable(pcWrite, bootAddrWire, (jump || issue) && !io.stall)
-//  val nextPC = RegInit(bootAddrWire)
-//  val pcReg = RegEnable(nextPC, bootAddrWire, issue)
-  val pcReg = RegInit(bootAddrWire)
-  io.if_pc := pcReg
-  printf(cf"[FE] pc: 0x$pcReg%x\n")
-  // printf(cf"[FE] jump: $jump\n")
-  // printf(cf"[FE] issue: $issue\n")
-  // printf(cf"boot: $regBooting\n")
-  // printf(cf"fq: ${fq.io.deq.start}\n")
-  // printf(cf"stall: ${io.stall}\n")
-
-  val instBuf = withReset(reset.asBool || fq.flush) { Module(new InstructionBuffer()) }
-  val issueLength = Mux(instBuf.io.curInstIsRVC, 2.U, 4.U)
-
-//  when(issue && !io.stall) {
-  when(instBuf.io.instPacket.fire) {
-    when(io.exception || io.eret) {
-      pcReg := io.evec
-    }.elsewhen(jump) {
-      pcReg := jumpPC
-    }.elsewhen(io.flushFetchQueue.ie.csr.orR) {
-      pcReg := io.ie_pc + 4.U // ie instruction's issue legnth!
-    }.otherwise {
-      pcReg := pcReg + issueLength
-    }
+  fetchedPacket.bits.data := bitPatToUInt(NOP)
+  fetchedPacket.bits.xcpt := fq.noXcptLit
+  fetchedPacket.bits.rvc := false.B
+  when (fq.io.canDeq) {
+    fetchedPacket.bits.data := instData
+    fetchedPacket.bits.xcpt := fq.io.deqXcpt
+    fetchedPacket.bits.rvc := instRvc
   }
-  // pcWrite := Mux(jump, jumpPC, pcReg + 4.U)
-//  pcWrite := Mux(fq.flush, fetchPC, pcReg + 4.U)
+  io.fetchedPacket := fetchedPacket
 
-  // Issue
-//  fq.io.deq.ready := !io.stall // issue signal will block when stalled
-//  io.instPacket <> fq.io.deq
-//  io.issue := issue
+  // Used to tval register update when illegal instruction exception occurs
+  // And trigger, it should be used to raw instructions including RVC
+  io.instRaw := (0.U(16.W) & fq.io.deqData(31,16)) ## fq.io.deqData(15,0)
 
-  // Instruction buffer
-  instBuf.io.fetchQueueTail <> fq.io.deq
-  io.instPacket <> instBuf.io.instPacket
-  instBuf.io.if_pc := pcReg
-  instBuf.io.stall := io.stall
+  when(!io.stall) {
+    when(regJumpNextCycle || jumpCurrentCycle){
+      curPC := targetAddr
+    }.elsewhen(fetchedPacket.valid) {
+      curPC := Mux(fetchedPacket.bits.rvc, curPC + 2.U, curPC + 4.U)
+    }
+  }.otherwise {
+    curPC := curPC
+  }
+
+
+  val ignoreCount = RegInit(0.U(2.W))
+  when (flush) {
+//  when (flush || regFlush) {
+//     To decouple request and jump on next cycle, request will go out but ack will be ignored
+    ignoreCount := fq.io.inflightCount - (io.epm.ack && io.epm.gnt) + (jumpNextCycle && fq.io.allocateSucceed)
+  }.otherwise {
+    ignoreCount := Mux(ignoreCount =/= 0.U, ignoreCount - 1.U, 0.U)
+  }
+
+  val ignore = flush || ignoreCount =/= 0.U
+
+  // Only after jump can cause unaligned prefetchReq, And curPC has the target address of fetchedPacket address
+  // After enqueued, curPC no more indicates the target address
+  // Fetched data comes up in an incremental manner starting from requested address
+  // Such as... requested address: 0x4, fetch width: 16Bytes -> Data address: 0x4, 0x8, ... , 0x20
+  val unalignedFetchData = fq.io.empty && curPC(1,0) =/= 0.U
+  fq.io.enqSize := Mux(unalignedFetchData, 0.U, 1.U)
+  fq.io.enqData := Mux(unalignedFetchData, io.epm.data >> 16, io.epm.data)
+  fq.io.enqXcpt := io.epm.xcpt
+  fq.io.enq := io.epm.ack && !ignore && io.epm.gnt
+  fq.io.ack := io.epm.ack && io.epm.gnt
 }
