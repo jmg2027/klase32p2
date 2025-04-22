@@ -1,10 +1,7 @@
-package snitch
+package klase32.include
 
 import chisel3._
-import chisel3.util._
 import chisel3.experimental.BundleLiterals._
-import chisel3.util.BitPat.bitPatToUInt
-import klase32.config._
 
 // Thanks to d.hyun.ahn
 
@@ -159,6 +156,7 @@ object types {
     val e = Bool()      // external
     val t = Bool()      // timer
     val s = Bool()      // software
+    val d = Bool() // debug
 
     def &(op: Interrupt) = {
       val ret = Wire(new Interrupt())
