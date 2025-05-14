@@ -1,4 +1,4 @@
-package klase32
+package klase32.functionalunit
 
 import chisel3._
 import chisel3.util._
@@ -7,52 +7,112 @@ import chisel3.util.BitPat.bitPatToUInt
 import klase32.include.config._
 import klase32.include.param.KLASE32ParamKey
 import klase32.include.KLASE32AbstractClass._
-import klase32.include.ControlSignal._
+import klase32.include.ControlSignal.{FenceEnableIE, _}
 import klase32.include.{EdmIntf, HeartXcpt, LSUControl, QueueWithAccessableEntryWithValid, StoreBufferEntry}
 import klase32.include.enums.DataSize
 import klase32.include.util.LeadingOneDetector
 import freechips.rocketchip.rocket.constants.MemoryOpConstants
 import freechips.rocketchip.rocket.Causes
+import klase32.common.FunctionUnitIO
 
+class LSUReq(implicit p: Parameters) extends CoreBundle {
+  private val k = p(KLASE32ParamKey)
 
-class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
+  val ctrl = new LSUControl
+  val addr = UInt(k.vaddrBits.W)
+  val wrdata = UInt(k.dataWidth.W)
+  val fence = FenceEnableIE() // How to deal with fence?
+  val rd = UInt(regIdWidth.W)
+}
+
+class LSUResp(implicit p: Parameters) extends CoreBundle {
+  private val k = p(KLASE32ParamKey)
+
+  val rddata = UInt(k.dataWidth.W)
+  val loadAck = Bool()
+  val xcpt = new HeartXcpt
+  val rd = UInt(regIdWidth.W)
+}
+
+class LSUCoreIn(implicit p: Parameters) extends CoreBundle {
+  private val k = p(KLASE32ParamKey)
+
+  val ctrl = new LSUControl
+  val addr = UInt(k.vaddrBits.W)
+  val wrdata = UInt(k.dataWidth.W)
+  val fence = Input(Bool()) // How to deal with fence?
+  val rd = UInt(regIdWidth.W)
+}
+
+class LSUCoreOut(implicit p: Parameters) extends CoreBundle {
+  private val k = p(KLASE32ParamKey)
+
+  val rddata = UInt(k.dataWidth.W)
+  val loadAck = Bool()
+  val xcpt = new HeartXcpt
+  val rd = UInt(regIdWidth.W)
+  val storeFull, loadFull = Bool()
+  val storeEmpty, loadEmpty = Bool()
+}
+
+class LSU(implicit p: Parameters) extends CoreModule
+with FunctionUnitIO[LSUReq, LSUResp] {
+  val req = IO(Flipped(Decoupled(new LSUReq)))
+  val resp = IO(Decoupled(new LSUResp))
+
+  val io = IO(new Bundle {
+    val edm = new EdmIntf()
+  })
+
+  val core = Module(new LSUCore)
+
+  val isLoad = req.bits.ctrl.isLoad === LoadControl.EN
+  val isStore = req.bits.ctrl.isStore === StoreControl.EN
+  req.ready := !core.io.out.storeFull &&
+    (!isLoad || !core.io.out.loadFull)
+
+  // How to deal with fire policy?
+  when(req.fire) {
+    core.io.in.ctrl := req.bits.ctrl
+    core.io.in.addr := req.bits.addr
+    core.io.in.wrdata := req.bits.wrdata
+    core.io.in.rd := req.bits.rd
+  }
+
+  resp.valid := core.io.out.loadAck
+  resp.bits.rddata := core.io.out.rddata
+  resp.bits.rd := core.io.out.rd
+  resp.bits.loadAck := core.io.out.loadAck
+  resp.bits.xcpt := core.io.out.xcpt
+
+  resp.ready := true.B
+
+  private val isFence = req.bits.fence === FenceEnableIE.EN
+
+  def stallSignal: Bool = !req.ready || (isFence && core.io.out.storeEmpty && core.io.out.loadEmpty)
+}
+
+class LSUCore(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   val k = p(KLASE32ParamKey)
 
-  val io = IO(new Bundle{
-    val lsuctrlIE = Input(new LSUControl)
-    val lsuctrlME = Input(new LSUControl)
+  val io = IO(new Bundle {
+    val in = Input(new LSUCoreIn())
+    val out = Input(new LSUCoreOut())
 
     val edm = new EdmIntf()
+  })
 
-    val addr = Input(UInt(k.vaddrBits.W))
-    val rddata = Output(UInt(k.dataWidth.W))
-    val wrdata = Input(UInt(k.dataWidth.W))
-
-    val storeFull = Output(Bool())
-    val storeEmpty = Output(Bool())
-    val loadFull = Output(Bool())
-    val loadEmpty = Output(Bool())
-
-    val ldXcpt = Output(new HeartXcpt)
-    val stXcpt = Output(new HeartXcpt)
-
-    val stall = Input(Bool())
-    val stallME = Input(Bool())
-
-    val canLoadWriteback = Output(Bool())
-  }
-  )
   // Align address
-  val addrAligned = Cat(io.addr(k.vaddrBits - 1, log2Ceil(addressAlignByte)), 0.U(log2Ceil(addressAlignByte).W))
-  val offsetAligned = io.addr(log2Ceil(addressAlignByte) - 1, 0)
+  val addrAligned = Cat(io.in.addr(k.vaddrBits - 1, log2Ceil(addressAlignByte)), 0.U(log2Ceil(addressAlignByte).W))
+  val offsetAligned = io.in.addr(log2Ceil(addressAlignByte) - 1, 0)
 
-  // Align store data: shift the write data based on the address offset and create a mask for the store operation
-  val storeDataAligned = (io.wrdata << (offsetAligned << 3.U).asUInt).asUInt
+  // Align store data: shift the write data based on the address offset and create a mask for the store operatreq.bitsn
+  val storeDataAligned = (io.in.wrdata << (offsetAligned << 3.U).asUInt).asUInt
   val storeDataMask = Mux1H(
     Seq(
-      (io.lsuctrlIE.lsSize === DataSize.Byte) -> ("b0001".U << offsetAligned).asUInt,
-      (io.lsuctrlIE.lsSize === DataSize.HalfWord) -> ("b0011".U << offsetAligned).asUInt,
-      (io.lsuctrlIE.lsSize === DataSize.Word) -> "b1111".U,
+      (io.in.ctrl.lsSize === DataSize.Byte) -> ("b0001".U << offsetAligned).asUInt,
+      (io.in.ctrl.lsSize === DataSize.HalfWord) -> ("b0011".U << offsetAligned).asUInt,
+      (io.in.ctrl.lsSize === DataSize.Word) -> "b1111".U,
     )
   )
 
@@ -64,15 +124,15 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   // In-order Store queue will monitor whether store is done by ack
   if (storeBufferNotExists) {
     val sb = Module(new QueueWithAccessableEntryWithValid(new StoreBufferEntry, storeBufferEntries, hasFlush = true))
-    sb.io.enq.valid := (io.lsuctrlIE.isStore === StoreControl.EN) && !io.stall && io.edm.st_gnt
+    sb.io.enq.valid := (io.in.ctrl.isStore === StoreControl.EN) && io.edm.st_gnt
     sb.io.enq.bits.addr := io.edm.st_paddr
     sb.io.enq.bits.mask := io.edm.st_mask
     sb.io.enq.bits.data := io.edm.st_wdata
-    io.storeFull := !sb.io.enq.ready
-    io.storeEmpty := !sb.io.deq.valid
+    io.out.storeFull := !sb.io.enq.ready
+    io.out.storeEmpty := !sb.io.deq.valid
 
     // Store buffer flush when store exception occurs
-    sb.flush := io.stXcpt.asUInt.orR
+    sb.flush := io.out.xcpt.asUInt.orR
 
     // Check store buffer address for load
     //  printf(cf"[LSU] sb.enq: ${sb.io.enq}\n")
@@ -81,7 +141,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
 
     // Compare load and store address
     for (i <- 0 until storeBufferEntries) {
-      loadMatchStoreVec(i) := (sb.entry(i).addr === io.addr) && (io.lsuctrlIE.isLoad === LoadControl.EN)
+      loadMatchStoreVec(i) := (sb.entry(i).addr === io.in.addr) && (io.in.ctrl.isLoad === LoadControl.EN)
       loadMatchData := PriorityMux(Seq(
         loadMatchStoreVec(storeBufferEntries - i - 1) -> sb.entry(i).data
       ))
@@ -110,16 +170,16 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
       }
     }
 
-    io.storeFull := StoreRequestOnTheFly && !io.edm.st_ack
-    io.storeEmpty := !StoreRequestOnTheFly
+    io.out.storeFull := StoreRequestOnTheFly && !io.edm.st_ack
+    io.out.storeEmpty := !StoreRequestOnTheFly
 
     loadMatchWithStoreBufferEntry.valid := false.B
     loadMatchWithStoreBufferEntry.bits := 0.U.asTypeOf(loadMatchWithStoreBufferEntry.bits)
 
-    io.edm.st_req := (io.lsuctrlIE.isStore === StoreControl.EN) && !io.stall && !io.storeFull
+    io.edm.st_req := (io.in.ctrl.isStore === StoreControl.EN) && !io.out.storeFull
   }
   // Align load data: shift the loaded data based on the address offset and adjust based on the load size and sign
-  val loadOffsetAligned = RegEnable(offsetAligned, (io.lsuctrlIE.isLoad === LoadControl.EN && !io.stall))
+  val loadOffsetAligned = RegEnable(offsetAligned, (io.in.ctrl.isLoad === LoadControl.EN))
   val loadDataAligned = {
     val shiftedData = (io.edm.ld_rdata >> (loadOffsetAligned << 3.U).asUInt).asUInt
 //    val slicedData = Mux1H(
@@ -141,9 +201,9 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   // Request to DM
   io.edm.cmd := MuxCase(0.U,
     Seq(
-      ((io.lsuctrlIE.isLoad === LoadControl.EN)) -> M_XRD,
-      ((io.lsuctrlIE.isStore === StoreControl.EN) && (io.edm.st_mask === "b1111".U)) -> M_XWR,
-      ((io.lsuctrlIE.isStore === StoreControl.EN) && (io.edm.st_mask =/= "b1111".U)) -> M_PWR,
+      ((io.in.ctrl.isLoad === LoadControl.EN)) -> M_XRD,
+      ((io.in.ctrl.lsuctrlIE.isStore === StoreControl.EN) && (io.edm.st_mask === "b1111".U)) -> M_XWR,
+      ((io.in.ctrl.lsuctrlIE.isStore === StoreControl.EN) && (io.edm.st_mask =/= "b1111".U)) -> M_PWR,
     )
   )
 
@@ -153,16 +213,15 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
   // Load request issues in IE
   // FIXME: store buffer
 //  io.edm.ld_req := (io.lsuctrlIE.isLoad === LoadControl.EN) && !io.stall && !loadMatchStore
-  io.edm.ld_req := (io.lsuctrlIE.isLoad === LoadControl.EN) && !io.stall && io.edm.ld_gnt
+  io.edm.ld_req := (io.in.ctrl.lsuctrlIE.isLoad === LoadControl.EN) && !io.stall && io.edm.ld_gnt
   io.edm.ld_vaddr := addrAligned
   io.edm.ld_kill := DontCare
   io.edm.ld_mmio_kill := DontCare
 
   val loadRequestOnthefly = RegInit(false.B)
 
-//  io.loadFull := loadRequestOnthefly && io.lsuctrlIE.isLoad === LoadControl.EN // When multiple load requires
   // No multiple load
-  io.loadFull := loadRequestOnthefly && !io.edm.ld_ack
+  io.status.loadFull := loadRequestOnthefly && !io.edm.ld_ack
   when (!loadRequestOnthefly) {
     when(io.edm.ld_req && !io.edm.ld_ack) {
       loadRequestOnthefly := true.B
@@ -174,7 +233,7 @@ class LSU(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
     }
   }
   // 1 load can be on the fly, so empty means no request is on the fly
-  io.loadEmpty := !loadRequestOnthefly
+  io.status.loadEmpty := !loadRequestOnthefly
 
   // Store request issues from store buffer
   // FIXME: Why do we need to stall signals for enq/deq?
