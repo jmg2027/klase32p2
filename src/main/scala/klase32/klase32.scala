@@ -67,9 +67,11 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // Module definition
   val alu = Module(new klase32.functionalunit.ALU)
   val lsu = Module(new klase32.functionalunit.LSU)
+  val scoreboard = Module(new Scoreboard)
   val div = Module(new klase32.functionalunit.DIV)
   val mpy = Module(new klase32.functionalunit.MPY)
   val frontend = Module(new Frontend)
+  val bypass = Module(new Bypass)
   val csr = Module(new klase32.functionalunit.CSR)
   val hzd = Module(new Hazards)
   val dec = Module(new Decoder)
@@ -79,49 +81,51 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   val ctrlSig = dec.io.decSig
 
   // Register writeback signal
-  val aluWriteBackValid = Wire(Bool())
-  val loadWriteBackValid = Wire(Bool())
+//  val aluWriteBackValid = Wire(Bool())
+//  val loadWriteBackValid = Wire(Bool())
 
   // Stall
-  val stallSig = WireInit(new Stall, DontCare)
-  stallSig.ie.storeFull := lsu.io.storeFull
-  stallSig.ie.mpy := false.B
-  stallSig.ie.div := false.B
-
-  if (writeportNum == 1) {
-    stallSig.ie.loadUseWriteBack := loadWriteBackValid
-    stallSig.me.loadFull := lsu.io.loadFull
-  } else if (writeportNum == 2) {
-    stallSig.ie.loadUseWriteBack := false.B
-    stallSig.me.loadFull := lsu.io.loadFull
-  }
-  stallSig.me.wfi := csr.io.wfiOut
-  stallSig.me.hzd := hzd.io.stall
-  stallSig.me.fence := ctrlSig.fence.asUInt.orR && (!lsu.io.loadEmpty || !lsu.io.storeEmpty)
-  val stallIE = stallSig.ie.orR
-  val stallME = stallSig.me.orR
-  val stall = stallIE || stallME || io.forceStall
+  val functionUnitList = Seq(alu, mpy, div, lsu, scoreboard, csr)
+  val stall  = fuList.map(!_.req.ready).reduce(_||_) || io.forceStall
+//  val stallSig = WireInit(new Stall, DontCare)
+//  stallSig.ie.storeFull := lsu.io.storeFull
+//  stallSig.ie.mpy := false.B
+//  stallSig.ie.div := false.B
+//
+//  if (writeportNum == 1) {
+//    stallSig.ie.loadUseWriteBack := loadWriteBackValid
+//    stallSig.me.loadFull := lsu.io.loadFull
+//  } else if (writeportNum == 2) {
+//    stallSig.ie.loadUseWriteBack := false.B
+//    stallSig.me.loadFull := lsu.io.loadFull
+//  }
+//  stallSig.me.wfi := csr.io.wfiOut
+//  stallSig.me.hzd := hzd.io.stall
+//  stallSig.me.fence := ctrlSig.fence.asUInt.orR && (!lsu.io.loadEmpty || !lsu.io.storeEmpty)
+//  val stallIE = stallSig.ie.orR
+//  val stallME = stallSig.me.orR
+//  val stall = stallIE || stallME || io.forceStall
 
   // Flush
   // FIXME: Can be optimized
   val flushSig = WireInit(new Flush, DontCare)
   flushSig.ie.jump := frontend.io.jump
   // When exception occurs, flush pipe and fetch queue since new instruction needed to be fetched from
-  flushSig.ie.xcpt := frontend.io.exception
+  flushSig.ie.xcpt := ieXcpt || meXcpt
   flushSig.ie.eret := ctrlSig.ecall.asUInt.orR || ctrlSig.ebreak.asUInt.orR || ctrlSig.mret.asUInt.orR || ctrlSig.dret.asUInt.orR
   flushSig.ie.csr := csr.resp.bits.csrWriteFlush
   flushSig.ie.wfi := ctrlSig.wfi.asUInt.orR
-  flushSig.ie.dbgFire := csr.io.debug.fire.orR
+  flushSig.ie.dbgFire := csr.io.debug.fire
   val flushIE = flushSig.ie.orR
   val flush = reset.asBool || flushIE
 
   // Pipeline
   val ieIn = frontend.io.issue
-  val ieSlotValid = RegInit(false.B)
-  val ieAllowNext = !stall
-  ieIn.ready := ieAllowNext
-  when(flushSig.ie.asUInt.orR) {ieSlotValid := false.B}
-  when(ieAllowNext) {ieSlotValid := true.B}
+//  val ieSlotValid = RegInit(false.B)
+//  val ieAllowNext = !stall
+  ieIn.ready := !stall
+//  when(flushSig.ie.asUInt.orR) {ieSlotValid := false.B}
+//  when(ieAllowNext) {ieSlotValid := true.B}
   val ie_inst_raw = frontend.io.instRaw
 
   //  printf(cf"===============================New Cycle===============================\n")
@@ -137,10 +141,10 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // printf(cf"stallSig.me.fence: ${stallSig.me.fence}\n")
 
   //  val me_inst = RegEnable(ie_inst, bitPatToUInt(NOP), !stallME)
-  val me_pc = withReset(flush) {RegEnable(ieIn.bits.pc, !stallME)}
-  val me_lsu = withReset(flush) {RegEnable(ctrlSig.lsuCtrl, !stallME)}
-  val me_isLoad = withReset(flush) {RegEnable(ctrlSig.lsuCtrl.isLoad, !stallME)}
-  val me_rdaddr = withReset(flush) {RegEnable(ctrlSig.rd, !stallME)}
+//  val me_pc = withReset(flush) {RegEnable(ieIn.bits.pc, !stallME)}
+//  val me_lsu = withReset(flush) {RegEnable(ctrlSig.lsuCtrl, !stallME)}
+//  val me_isLoad = withReset(flush) {RegEnable(ctrlSig.lsuCtrl.isLoad, !stallME)}
+//  val me_rdaddr = withReset(flush) {RegEnable(ctrlSig.rd, !stallME)}
 
 
   // Exception
@@ -158,10 +162,12 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
     (ctrlSig.ebreak === EbreakIE.EN, Causes.breakpoint.U),
     (csr.io.trigFire.breakPoint.store, Causes.breakpoint.U),
 
-    (lsu.io.stXcpt.pf, Causes.store_page_fault.U),
-    (lsu.io.stXcpt.gf, Causes.store_guest_page_fault.U),
-    (lsu.io.stXcpt.ae, Causes.store_access.U),
-    (lsu.io.stXcpt.ma, Causes.misaligned_store.U),
+    // TODO: Need to discuss when and where to detect faults
+    // This is temporal handling
+    (lsu.resp.xcpt.pf, Causes.store_page_fault.U),
+    (lsu.resp.xcpt.gf, Causes.store_guest_page_fault.U),
+    (lsu.resp.xcpt.ae, Causes.store_access.U),
+    (lsu.resp.xcpt.ma, Causes.misaligned_store.U),
 
     // TODO: Add conditions for instruction address breakpoints and data address breakpoints
     (csr.io.interruptPending.pending, csr.io.interruptPending.cause),
@@ -169,10 +175,10 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 
   val (meXcpt, meCause): (Bool, UInt)= checkExceptions(List(
     (csr.io.trigFire.loadData, Causes.breakpoint.U),
-    (lsu.io.ldXcpt.pf, Causes.load_page_fault.U),
-    (lsu.io.ldXcpt.gf, Causes.load_guest_page_fault.U),
-    (lsu.io.ldXcpt.ae, Causes.load_access.U),
-    (lsu.io.ldXcpt.ma, Causes.misaligned_load.U),
+    (lsu.resp.fire && lsu.resp.xcpt.pf, Causes.load_page_fault.U),
+    (lsu.resp.fire && lsu.resp.xcpt.gf, Causes.load_guest_page_fault.U),
+    (lsu.resp.fire && lsu.resp.xcpt.ae, Causes.load_access.U),
+    (lsu.resp.fire && lsu.resp.xcpt.ma, Causes.misaligned_load.U),
   ))
 
   // Fetch & Issue
@@ -217,48 +223,58 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   // Register file
   reg.io.rp(0).addr := ctrlSig.rs1
   reg.io.rp(1).addr := ctrlSig.rs2
-  val rs1 = Mux(!hzd.io.bypassRS1RD, reg.io.rp(0).data, lsu.io.rddata)
-  val rs2 = Mux(!hzd.io.bypassRS2RD, reg.io.rp(1).data, lsu.io.rddata)
+  val bypassData = lsu.resp.bits.rddata
+  val rs1 = Mux(!bypass.io.bypassRS1, reg.io.rp(0).data, bypassData)
+  val rs2 = Mux(!bypass.io.bypassRS2, reg.io.rp(1).data, bypassData)
+//
+//  aluWriteBackValid := ((ctrlSig.w0Wb.asUInt.orR && !stall) || div.resp.valid) &&
+//    (!(ieXcpt || meXcpt) && !csr.io.trigFire.debugMode)
+//
+//  loadWriteBackValid := me_isLoad.asUInt.orR && !stallME && !hzd.io.ldNotWriteback &&
+//    ((!meXcpt && !csr.io.trigFire.debugMode) || ((meXcpt || csr.io.trigFire.debugMode) && csr.io.trigFire.loadData))
 
-  aluWriteBackValid := ((ctrlSig.w0Wb.asUInt.orR && !stall) || div.resp.valid) &&
-    (!(ieXcpt || meXcpt) && !csr.io.trigFire.debugMode)
+  class WritebackBundle(implicit p: Parameters) extends Bundle {
+    val rd   = UInt(regIdWidth.W)
+    val data = UInt(mxLen.W)
+  }
+  case class WbEntry(valid: Bool, bits: WritebackBundle)
 
-  loadWriteBackValid := me_isLoad.asUInt.orR && !stallME && !hzd.io.ldNotWriteback &&
-    ((!meXcpt && !csr.io.trigFire.debugMode) || ((meXcpt || csr.io.trigFire.debugMode) && csr.io.trigFire.loadData))
-
-  if (writeportNum == 2) {
-    reg.io.wp(0).bits.addr := ctrlSig.rd
-    reg.io.wp(1).bits.addr := me_rdaddr
-    // When exception occurs, do not writeback current
-    // When load data/address triggers, write back load data
-    reg.io.wp(0).valid := aluWriteBackValid
-    // When load wbData is same as wbData of ie pipe instruction, most recent value which updates register is not load data
-    reg.io.wp(1).valid := loadWriteBackValid
-    reg.io.wp(0).bits.data := Mux1H(Seq(
-      RdType.Alu -> alu.resp.bits.R,
-      RdType.ConsecPC -> (frontend.io.ie_pc + Mux(frontend.io.issue.bits.rvc, 2.U, 4.U)),
-      RdType.BypassCSR -> csr.resp.bits.wbData
-    ).map {case(k, v) => (k === ctrlSig.rdType, v)} :+
-      (div.resp.valid -> div.resp.bits) :+
-      (mpy.resp.valid -> mpy.resp.bits.P)
-    )
-    reg.io.wp(1).bits.data := lsu.io.rddata
-  } else if(writeportNum == 1) {
-    reg.io.wp(0).bits.addr := Mux(loadWriteBackValid, me_rdaddr, ctrlSig.rd)
-    reg.io.wp(0).valid := (aluWriteBackValid && !loadWriteBackValid) || (loadWriteBackValid && lsu.io.canLoadWriteback)
-
-    val aluWriteBackData = Mux1H(Seq(
-      RdType.Alu -> alu.resp.bits.R,
-      RdType.ConsecPC -> (frontend.io.ie_pc + Mux(frontend.io.issue.bits.rvc, 2.U, 4.U)),
-      RdType.BypassCSR -> csr.resp.bits.wbData
-    ).map { case (k, v) => (k === ctrlSig.rdType, v) } :+
-      (div.resp.valid -> div.resp.bits.result) :+
-      (mpy.resp.valid -> mpy.resp.bits.P)
-    )
-    val loadWriteBackData = lsu.io.rddata
-    reg.io.wp(0).bits.data := Mux(loadWriteBackValid, loadWriteBackData, aluWriteBackData)
+  def WB(v: Bool, rd: UInt, d: UInt)(implicit p: Parameters): WbEntry = {
+    val b = Wire(new WritebackBundle); b.rd := rd; b.data := d; WbEntry(v, b)
   }
 
+  val wbBlock = ieXcpt || meXcpt || csr.io.debug.enterDmode
+
+  val aluEntry = WB(alu.resp.valid , alu.resp.bits.rd , alu.resp.bits.R      )
+  val mpyEntry = WB(mpy.resp.valid , mpy.resp.bits.rd , mpy.resp.bits.P      )
+  val divEntry = WB(div.resp.valid , div.resp.bits.rd , div.resp.bits.result )
+  val lsuEntry = WB(lsu.resp.fire  , lsu.resp.bits.rd , lsu.resp.bits.rddata )
+  val csrEntry = WB(csr.resp.valid , csr.resp.bits.rd , csr.resp.bits.wbData )
+
+  // 블로킹 적용
+  val wbEntries = Seq(aluEntry, mpyEntry, divEntry, lsuEntry, csrEntry)
+    .map(e => e.copy(valid = e.valid && !wbBlock))
+
+  if (writeportNum == 1) {
+    // LSU is first priority
+    val wbList = Seq(lsuEntry) ++ wbEntries.filterNot(_ eq lsuEntry)
+    val sel    = PriorityMux(wbList.map(e => e.valid -> e.bits))
+
+    reg.io.wp(0).valid := wbList.map(_.valid).reduce(_||_)
+    reg.io.wp(0).bits  := sel
+  }
+  else if(writeportNum == 2) {                     // 2-포트 : wp(1) = Load 전용
+    // wp(1) — load only
+    reg.io.wp(1).valid := lsuEntry.valid
+    reg.io.wp(1).bits  := lsuEntry.bits
+
+    // wp(0) — 나머지 FU 들
+    val others = wbEntries.filterNot(_ eq lsuEntry)
+    val sel    = PriorityMux(others.map(e => e.valid -> e.bits))
+
+    reg.io.wp(0).valid := others.map(_.valid).reduce(_||_)
+    reg.io.wp(0).bits  := sel
+  }
 
   // MPY
   val mpyReq = Wire(new klase32.functionalunit.MPYReq)
@@ -268,7 +284,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   mpyReq.rd := ctrlSig.rd
 
   mpy.req.bits := mpyReq
-  mpy.req.valid := ieSlotValid && !stall && (ctrlSig.mpyCtrl =/= MPYControlIE.default)
+  mpy.req.valid := ieIn.valid && !stall && (ctrlSig.mpyCtrl =/= MPYControlIE.default)
   mpy.resp.ready := true.B
 
   // DIV
@@ -281,7 +297,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
 //  div.io.B := Mux(div.io.ctrl =/= DIVControlIE.default, rs2.asSInt, 0.S) // Can use mux
 
   div.req.bits := divReq
-  div.req.valid := ieSlotValid && !stall && (ctrlSig.divCtrl =/= DIVControlIE.default)
+  div.req.valid := ieIn.valid && !stall && (ctrlSig.divCtrl =/= DIVControlIE.default)
   div.resp.ready := true.B
 
 
@@ -309,7 +325,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   aluReq.rd := ctrlSig.rd
 
   alu.req.bits := aluReq
-  alu.req.valid := ieSlotValid && !stall && ctrlSig.aluCtrl =/= ALUControlIE.default
+  alu.req.valid := ieIn.valid && !stall && ctrlSig.aluCtrl =/= ALUControlIE.default
   alu.resp.ready := true.B
 
   // CSR
@@ -338,7 +354,7 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   csr.io.trigSrc.instruction := ie_inst_raw
   csr.io.trigSrc.pc := ieIn.bits.pc
 
-  csr.io.ie_inst_valid := ieSlotValid
+  csr.io.ie_inst_valid := ieIn.valid
 
   // FIXME: When speculative load/store supported, exception should be failed load/store pc
   csr.io.trap.ie.exception := ieXcpt
@@ -347,10 +363,10 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   csr.io.trap.me.cause := meCause
   csr.io.trap.ie.pc := ieIn.bits.pc
   csr.io.trap.me.pc := me_pc
-  csr.io.trigSrc.loadAddr := Mux(lsu.io.lsuctrlIE.isLoad === LoadControl.EN, lsu.io.addr, 0.U)
-  csr.io.trigSrc.storeAddr := Mux(lsu.io.lsuctrlIE.isStore === StoreControl.EN, lsu.io.addr, 0.U)
-  csr.io.trigSrc.loadData := lsu.io.rddata // valid check in LSU when ld_ack is recieved
-  csr.io.trigSrc.storeData := Mux(lsu.io.lsuctrlIE.isStore === StoreControl.EN, lsu.io.wrdata, 0.U)
+  csr.io.trigSrc.loadAddr := Mux(lsu.req.ctrl.isLoad === LoadControl.EN, lsu.req.addr, 0.U)
+  csr.io.trigSrc.storeAddr := Mux(lsu.req.ctrl.isStore === StoreControl.EN, lsu.req.addr, 0.U)
+  csr.io.trigSrc.loadData := lsu.resp.rddata // valid check in LSU when ld_ack is recieved
+  csr.io.trigSrc.storeData := Mux(lsu.req.ctrlisStore === StoreControl.EN, lsu.req.wrdata, 0.U)
 
   io.powerdown := csr.io.wfiOut
 
@@ -365,46 +381,35 @@ class KLASE32(hartId: Int)(implicit p: Parameters) extends CoreModule
   io.mepc := csr.io.csr.mepc
   io.iepc := ieIn.bits.pc
 
-  // Hazard
-  // FIXME: Why does this not work?
-  hzd.io.rs1Valid := ((OperandType.Reg) === (ctrlSig.operandSelect.a))
-  // RS2: ALU.B || Store || Branch
-  hzd.io.rs2Valid := ((ctrlSig.operandSelect.b) === (OperandType.Reg)) ||
-    ((ctrlSig.frontendCtrl) === (FrontendControlIE.BR)) ||
-    ((ctrlSig.lsuCtrl.isStore) === (StoreControl.EN))
-  hzd.io.loadValidIE := lsu.io.lsuctrlIE.isLoad === LoadControl.EN
-  hzd.io.loadValidME := me_isLoad === LoadControl.EN
-  hzd.io.loadDataValidME := lsu.io.canLoadWriteback
+  // Scoreboard
+  scoreboard.io.rs1 := ctrlSig.rs1
+  scoreboard.io.rs2 := ctrlSig.rs2
+  scoreboard.io.set.valid   := lsu.req.fire && ctrlSig.lsuCtrl.isLoad
+  scoreboard.io.set.bits    := ctrlSig.rd
+  scoreboard.io.clear.valid := lsu.resp.fire
+  scoreboard.io.clear.bits  := lsu.resp.bits.rd
 
-//  hzd.io.divBusy := div.io.busy
-  hzd.io.divBusy := false.B
-  hzd.io.divAddr := ctrlSig.rd
-//  hzd.io.divWrite := div.io.res.valid
-  hzd.io.divWrite := false.B
-
-  hzd.io.rs1Addr := ctrlSig.rs1
-  hzd.io.rs2Addr := ctrlSig.rs2
-  hzd.io.rdAddrME := me_rdaddr
-  // When rd is not used and does not write back, it must avoid to determine hazard condition
-  hzd.io.rdAddrIE := Mux(ctrlSig.w0Wb.asUInt.orR || ctrlSig.lsuCtrl.isLoad.asUInt.orR, ctrlSig.rd, 0.U)
-  // lsu.io.ldKill := hzd.io.ldNotWriteback
-
-  hzd.io.loadFull := lsu.io.loadFull
-  hzd.io.loadAck := io.edm.ld_ack
+  // Bypass
+  bypass.io.wb.valid := lsu.resp.fire
+  bypass.io.wb.bits := lsu.resp.bits.rd
+  bypass.io.rs1 := ctrlSig.rs1
+  bypass.io.rs2 := ctrlSig.rs2
 
   // LSU
-  lsu.io.lsuctrlIE <> ctrlSig.lsuCtrl
-  lsu.io.lsuctrlME <> me_lsu
+  lsu.req.valid      := ieIn.valid && !stall &&
+                        (ctrlSig.lsuCtrl.isLoad.orR || ctrlSig.lsuCtrl.isStore.orR)
+  lsu.req.bits.ctrl  := ctrlSig.lsuCtrl
+  lsu.req.bits.addr  := alu.resp.bits.R
+  lsu.req.bits.wrdata:= rs2
+  lsu.req.bits.fence := ctrlSig.fence
+  lsu.req.bits.rd    := ctrlSig.rd
+
+  lsu.resp.ready := true.B           // WB-mux가 항상 수신
 
   lsu.io.edm <> io.edm
-  lsu.io.addr := Mux(lsu.io.lsuctrlIE.isLoad === LoadControl.EN | lsu.io.lsuctrlIE.isStore === StoreControl.EN,
-    alu.resp.bits.R, 0.U)
-  lsu.io.wrdata := Mux(lsu.io.lsuctrlIE.isStore === StoreControl.EN, rs2, 0.U)
-  lsu.io.stall := stall
-  lsu.io.stallME := stallME
 
   // RVFI
-  io.rvfiValid := ieSlotValid
+  io.rvfiValid := ieIn.valid
   io.rvfiPC := ieIn.bits.pc
   io.rvfiIntreqEn := DontCare
   io.rvfiDebugEn := DontCare

@@ -40,7 +40,7 @@ class LSUCoreIn(implicit p: Parameters) extends CoreBundle {
   val ctrl = new LSUControl
   val addr = UInt(k.vaddrBits.W)
   val wrdata = UInt(k.dataWidth.W)
-  val fence = Input(Bool()) // How to deal with fence?
+  val fence = Bool() // How to deal with fence?
   val rd = UInt(regIdWidth.W)
 }
 
@@ -66,10 +66,12 @@ with FunctionUnitIO[LSUReq, LSUResp] {
 
   val core = Module(new LSUCore)
 
-  val isLoad = req.bits.ctrl.isLoad === LoadControl.EN
-  val isStore = req.bits.ctrl.isStore === StoreControl.EN
+  private val isLoad = req.bits.ctrl.isLoad === LoadControl.EN
+  private val isStore = req.bits.ctrl.isStore === StoreControl.EN
+  private val isFence = req.bits.fence === FenceEnableIE.EN
   req.ready := !core.io.out.storeFull &&
-    (!isLoad || !core.io.out.loadFull)
+    (!isLoad || !core.io.out.loadFull) &&
+    (!isFencne || core.io.out.storeEmpty && core.io.out.loadEmpty)
 
   // How to deal with fire policy?
   when(req.fire) {
@@ -86,10 +88,6 @@ with FunctionUnitIO[LSUReq, LSUResp] {
   resp.bits.xcpt := core.io.out.xcpt
 
   resp.ready := true.B
-
-  private val isFence = req.bits.fence === FenceEnableIE.EN
-
-  def stallSignal: Bool = !req.ready || (isFence && core.io.out.storeEmpty && core.io.out.loadEmpty)
 }
 
 class LSUCore(implicit p: Parameters) extends CoreModule with MemoryOpConstants {
@@ -97,7 +95,7 @@ class LSUCore(implicit p: Parameters) extends CoreModule with MemoryOpConstants 
 
   val io = IO(new Bundle {
     val in = Input(new LSUCoreIn())
-    val out = Input(new LSUCoreOut())
+    val out = Output(new LSUCoreOut())
 
     val edm = new EdmIntf()
   })
@@ -179,31 +177,28 @@ class LSUCore(implicit p: Parameters) extends CoreModule with MemoryOpConstants 
     io.edm.st_req := (io.in.ctrl.isStore === StoreControl.EN) && !io.out.storeFull
   }
   // Align load data: shift the loaded data based on the address offset and adjust based on the load size and sign
+  val meCtrl = RegEnable(io.in.ctrl, (io.in.ctrl.isLoad === LoadControl.EN))
   val loadOffsetAligned = RegEnable(offsetAligned, (io.in.ctrl.isLoad === LoadControl.EN))
   val loadDataAligned = {
     val shiftedData = (io.edm.ld_rdata >> (loadOffsetAligned << 3.U).asUInt).asUInt
-//    val slicedData = Mux1H(
     val loadData = Mux1H(
       Seq(
-        ((io.lsuctrlME.lsSize === DataSize.Byte) && (io.lsuctrlME.isSigned === SignedControl.unsigned)) -> shiftedData(7, 0),
-        ((io.lsuctrlME.lsSize === DataSize.Byte) && (io.lsuctrlME.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 8, shiftedData(7)), shiftedData(7, 0)),
-        ((io.lsuctrlME.lsSize === DataSize.HalfWord) && (io.lsuctrlME.isSigned === SignedControl.unsigned)) -> shiftedData(15, 0),
-        ((io.lsuctrlME.lsSize === DataSize.HalfWord) && (io.lsuctrlME.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 16, shiftedData(15)), shiftedData(15, 0)),
-        (io.lsuctrlME.lsSize === DataSize.Word) -> shiftedData,
+        ((meCtrl.lsSize === DataSize.Byte) && (meCtrl.isSigned === SignedControl.unsigned)) -> shiftedData(7, 0),
+        ((meCtrl.lsSize === DataSize.Byte) && (meCtrl.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 8, shiftedData(7)), shiftedData(7, 0)),
+        ((meCtrl.lsSize === DataSize.HalfWord) && (meCtrl.isSigned === SignedControl.unsigned)) -> shiftedData(15, 0),
+        ((meCtrl.lsSize === DataSize.HalfWord) && (meCtrl.isSigned === SignedControl.signed)) -> Cat(Fill(k.dataWidth - 16, shiftedData(15)), shiftedData(15, 0)),
+        (meCtrl.lsSize === DataSize.Word) -> shiftedData,
       )
     )
-//    printf(cf"loadOffset: $loadOffsetAligned\n")
-//    printf(cf"shiftedData: $shiftedData%x\n")
     loadData
   }
-//  printf(cf"loaddata: $loadDataAligned%x\n")
 
   // Request to DM
   io.edm.cmd := MuxCase(0.U,
     Seq(
       ((io.in.ctrl.isLoad === LoadControl.EN)) -> M_XRD,
-      ((io.in.ctrl.lsuctrlIE.isStore === StoreControl.EN) && (io.edm.st_mask === "b1111".U)) -> M_XWR,
-      ((io.in.ctrl.lsuctrlIE.isStore === StoreControl.EN) && (io.edm.st_mask =/= "b1111".U)) -> M_PWR,
+      ((io.in.ctrl.isStore === StoreControl.EN) && (io.edm.st_mask === "b1111".U)) -> M_XWR,
+      ((io.in.ctrl.isStore === StoreControl.EN) && (io.edm.st_mask =/= "b1111".U)) -> M_PWR,
     )
   )
 
@@ -213,7 +208,7 @@ class LSUCore(implicit p: Parameters) extends CoreModule with MemoryOpConstants 
   // Load request issues in IE
   // FIXME: store buffer
 //  io.edm.ld_req := (io.lsuctrlIE.isLoad === LoadControl.EN) && !io.stall && !loadMatchStore
-  io.edm.ld_req := (io.in.ctrl.lsuctrlIE.isLoad === LoadControl.EN) && !io.stall && io.edm.ld_gnt
+  io.edm.ld_req := (io.in.ctrl.lsuctrlIE.isLoad === LoadControl.EN) && io.edm.ld_gnt
   io.edm.ld_vaddr := addrAligned
   io.edm.ld_kill := DontCare
   io.edm.ld_mmio_kill := DontCare
@@ -221,7 +216,7 @@ class LSUCore(implicit p: Parameters) extends CoreModule with MemoryOpConstants 
   val loadRequestOnthefly = RegInit(false.B)
 
   // No multiple load
-  io.status.loadFull := loadRequestOnthefly && !io.edm.ld_ack
+  io.out.loadFull := loadRequestOnthefly && !io.edm.ld_ack
   when (!loadRequestOnthefly) {
     when(io.edm.ld_req && !io.edm.ld_ack) {
       loadRequestOnthefly := true.B
@@ -233,35 +228,18 @@ class LSUCore(implicit p: Parameters) extends CoreModule with MemoryOpConstants 
     }
   }
   // 1 load can be on the fly, so empty means no request is on the fly
-  io.status.loadEmpty := !loadRequestOnthefly
+  io.out.loadEmpty := !loadRequestOnthefly
 
   // Store request issues from store buffer
   // FIXME: Why do we need to stall signals for enq/deq?
   // FIXME: Within TCM address bound, store should not be stalled
   // FIXME: TCM address comes from io port
-//  io.edm.st_req := sb.io.deq.start && !io.stall
   // Request is sent when store buffer can accept store request
   // Store buffer will dequeue when ack arrives
-//  if (storeBufferNotExists) {
-//    io.edm.st_req := sb.io.enq.fire
-//    sb.io.deq.ready := io.edm.st_ack
-//  }
   io.edm.st_paddr := addrAligned
   io.edm.st_wdata := storeDataAligned
   io.edm.st_mask := storeDataMask
   io.edm.st_mmio := DontCare
-//  printf(cf"[LSU]io.edm: ${io.edm}\n")
-
-  // Response from DM: ME stage
-  //  val loadData = RegInit(0.U(k.dataWidth.W))
-  //  when (io.edm.ld_ack && io.stallME) {
-  //    io.rddata := 0.U
-  //    loadData := loadDataAligned
-  //  }.elsewhen (!io.stallME) {
-  //    io.rddata := loadData
-  //  }.otherwise {
-  //    io.rddata := loadDataAligned
-  //  }
 
   // When load address matches with address of store buffer entry
   // No load response occurs, so loadDataAligned does not switch, means prevent energy consumption
@@ -277,44 +255,26 @@ class LSUCore(implicit p: Parameters) extends CoreModule with MemoryOpConstants 
     loadData := loadMatchWithStoreBufferEntry.bits.data
   }
 
-  when(io.stallME && !skidLoadData.valid && io.canLoadWriteback) {
+  when(!skidLoadData.valid && io.canLoadWriteback) {
     skidLoadData.valid := true.B
     skidLoadData.bits := loadData
-    io.rddata := loadData
-  }.elsewhen (!io.stallME && skidLoadData.valid && io.canLoadWriteback) {
+    io.out.rddata := loadData
+  }.elsewhen (skidLoadData.valid && io.canLoadWriteback) {
     // In case skid buffer is valid and ack arrives
     // Write back skid buffer data and refill it by ack data
     skidLoadData.valid := true.B
     skidLoadData.bits := skidLoadData.bits
-    io.rddata := skidLoadData.bits
-  }.elsewhen(!io.stallME && skidLoadData.valid && !io.canLoadWriteback) {
+    io.out.rddata := skidLoadData.bits
+  }.elsewhen(skidLoadData.valid && !io.canLoadWriteback) {
     skidLoadData.valid := false.B
     skidLoadData.bits := skidLoadData.bits
-    io.rddata := skidLoadData.bits
+    io.out.rddata := skidLoadData.bits
   }.otherwise {
     skidLoadData.valid := false.B
     skidLoadData.bits := skidLoadData.bits
-    io.rddata := loadData
+    io.out.rddata := loadData
   }
 
   // Exception handling
-  // Assuming imprecise store exception for performance improvement
-  // However if we use page fault, it should be handled as preicise exception
-  // https://www.cs.yale.edu/homes/abhishek/gupta-isca23.pdf
-  // Can we at least save pc of exception? This may be helpful instead of saving all register files
-  // We should deal with multiple outstanding loads/stores and mmio requests... later
-  io.stXcpt := {
-    val result = Wire(new HeartXcpt)
-    (result.getElements zip io.edm.xcpt.getElements).foreach {
-      case (a, b) => a.asInstanceOf[Bool] := b.asInstanceOf[Bool] && io.edm.st_ack
-    }
-    result
-  }
-  io.ldXcpt := {
-    val result = Wire(new HeartXcpt)
-    (result.getElements zip io.edm.xcpt.getElements).foreach {
-      case (a, b) => a.asInstanceOf[Bool] := b.asInstanceOf[Bool] && io.edm.ld_ack
-    }
-    result
-  }
+  io.out.xcpt = io.edm.xcpt
 }
