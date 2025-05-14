@@ -8,8 +8,9 @@ import klase32.include.config._
 import klase32.include.param.KLASE32ParamKey
 import klase32.include.ControlSignal._
 import klase32.include.KLASE32AbstractClass._
-import klase32.include.{Flush, EpmIntf, InstructionPacket, FetchQueueEntry, HeartXcpt}
+import klase32.include.{EpmIntf, FetchQueueEntry, Flush, HeartXcpt, IFIEPipelineEntry, InstructionPacket}
 import freechips.rocketchip.rocket.RVCDecoder
+import klase32.functionalunit.{CSRDebug, CSRResetHartRequest, CSRSystemInstruction}
 
 class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
   val ctrl = Input(FrontendControlIE())
@@ -19,13 +20,11 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
   val exception = Input(Bool())
   val eret = Input(Bool())
   // for debugger
-  val dbgFire = Input(Bool())
-  val regDbgMode = Input(Bool())
+  val debug = Input(new CSRDebug())
+  // TODO: MAKE BUNDLE, SYSTEM inst, RET inst, WFI inst
   val ebreak = Input(Bool())
   val dret = Input(Bool())
-  val dpc = Input(UInt(mxLen.W))
 
-  val stall = Input(Bool())
   val wfiOut = Input(Bool())
   val wfi = Input(Bool())
 
@@ -35,7 +34,7 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
   val ie_pc = Input(UInt(mxLen.W))
   val brOffset = Input(UInt(13.W))
 
-  val fetchedPacket = Output(ValidIO(new FetchQueueEntry()))
+  val issue = Decoupled(new IFIEPipelineEntry())
   val instRaw = Output(UInt(32.W))
 
   val flushFetchQueue = Input(new Flush())
@@ -44,8 +43,7 @@ class FrontendIO(implicit p: Parameters) extends CoreBundle with HasCoreParamete
 
   val epm = new EpmIntf
 
-  val regBooting = Output(Bool())
-  val bootAddr = Output(UInt(mxLen.W))
+  val resetReq = Output(new CSRResetHartRequest())
 }
 
 
@@ -178,6 +176,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   val io = IO(new FrontendIO())
 
+  val issueEntry = Wire(Decoupled(new IFIEPipelineEntry()))
   // After n cycle prefetchReq will start
   val regBooting = RegInit(true.B)
 
@@ -191,28 +190,27 @@ class Frontend(implicit p: Parameters) extends CoreModule {
       regBooting := false.B
     }
   }
-  io.regBooting := regBooting
+  io.resetReq.booting := regBooting
 
   val bootAddr = if (usingOuterBootAddr) io.epm.bootAddr else bootAddrParam.U
-  io.bootAddr := bootAddr
+  io.resetReq.bootAddr := bootAddr
 
   // Next PC
   val brCond = (io.ctrl === BR) & io.cnd
   val haltCond = (io.ctrl === HALT)
   val jalCond = (io.ctrl === JAL)
-//  val jalrCond = (io.ctrl === JALR) | (io.ctrl === MRET) | (io.ctrl === DRET)
   val jalrCond = (io.ctrl === JALR)
-  val jump = !io.stall && (brCond || jalCond || jalrCond)
+  val jump = issueEntry.ready && (brCond || jalCond || jalrCond)
   io.jump := jump
 
   val sextBrOffset = Fill(xLen-13, io.brOffset(12)) ## io.brOffset
   val brAddr = io.ie_pc + sextBrOffset
   val jumpPC = Mux(brCond, brAddr, io.aluR)
 
-  val dbgFire = io.dbgFire
-  val dbgReturn = io.regDbgMode && io.dret
-  val dbgBreak = io.regDbgMode && io.ebreak
-  val dbgException = io.regDbgMode && io.exception
+  val dbgFire = io.debug.fire
+  val dbgReturn = io.debug.mode && io.dret
+  val dbgBreak = io.debug.mode && io.ebreak
+  val dbgException = io.debug.mode && io.exception
   val exception = io.exception || io.eret
   val csrInst = io.flushFetchQueue.ie.csr.orR
   val wfi = io.wfi
@@ -235,32 +233,23 @@ class Frontend(implicit p: Parameters) extends CoreModule {
       wfi
 
   // Flush fetch queue
-//  val flush = !io.stall && (io.flushFetchQueue.ie.xcpt ||
   val flush = io.flushFetchQueue.ie.jump ||
     io.flushFetchQueue.ie.csr ||
     io.flushFetchQueue.ie.wfi ||
     io.flushFetchQueue.ie.xcpt ||
       io.flushFetchQueue.ie.eret ||
       io.ebreak ||
-      io.dbgFire
+      io.debug.fire
 
   val nextPrefetchAddr = RegInit(bootAddr)
-  //  val targetAddr = WireInit(nextPrefetchAddr)
   val targetAddr = Wire(UInt(k.vaddrBits.W))
   val nextTargetAddr = Reg(UInt(k.vaddrBits.W))
 
   val fq = Module(new FetchQueue())
   fq.io.flush := flush
-//  when(jumpNextCycle) {
-//    fq.io.flush := regFlush
-//  }.otherwise {
-//    fq.io.flush := flush
-//  }
 
   // All exceptions are handled in IE stage
-//  fq.io.allocate := !regBooting && !io.wfiOut && !fq.io.hasXcpt
   // If current control is 1 cycle fetch such as exception, do not request in 0 cycle
-//  fq.io.allocate := !regBooting && !io.wfiOut && !(flush && jumpNextCycle)
   fq.io.allocate := !regBooting && !io.wfiOut
   fq.io.allocSize := Mux(targetAddr(1,0) =/= 0.U, 0.U, 1.U)
 
@@ -273,7 +262,7 @@ class Frontend(implicit p: Parameters) extends CoreModule {
   when(dbgFire) {
     nextTargetAddr := debugAddrParam.U
   }.elsewhen(dbgReturn) {
-    nextTargetAddr := io.dpc
+    nextTargetAddr := io.debug.dpc
   }.elsewhen(dbgBreak) {
     nextTargetAddr := debugAddrParam.U
   }.elsewhen(dbgException) {
@@ -294,24 +283,6 @@ class Frontend(implicit p: Parameters) extends CoreModule {
     targetAddr := nextPrefetchAddr
   }
 
-//  when(io.dbgFire) {
-//    targetAddr := debugAddrParam.U
-//  }.elsewhen(io.regDbgMode && io.dret) {
-//    targetAddr := io.dpc
-//  }.elsewhen(io.regDbgMode && io.ebreak) {
-//    targetAddr := debugAddrParam.U
-//  }.elsewhen(io.regDbgMode && io.exception) {
-//    targetAddr := debugExceptionAddrParam.U
-//  }.elsewhen(io.exception || io.eret) {
-//    targetAddr := io.evec
-//  }.elsewhen(jump) {
-//    targetAddr := jumpPC
-//  }.elsewhen(io.flushFetchQueue.ie.csr.orR || io.wfi) {
-//    targetAddr := io.ie_pc + 4.U
-//  }.otherwise {
-//    targetAddr := nextPrefetchAddr
-//  }
-
   // 4 bytes align
   io.epm.addr := prefetchAddr
   // printf(cf"[FE] fetchPC: 0x${io.epm.addr}%x\n")
@@ -323,36 +294,36 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   val curPC = RegInit(bootAddr)
 
-  fq.io.deq := !io.stall && fq.io.canDeq
+  fq.io.deq := issueEntry.ready && fq.io.canDeq
   val instRvc = fq.io.deqData(1, 0) =/= "b11".U
 //  val rvcExpanded = new RVCDecoder(fq.io.deqData, xLen = xLen, useAddiForMv = false).decode.bits
   // To prevent unnecessary power consumption of rvc decoder
   val rvcExpanded = new RVCDecoder(Mux(instRvc, 0.U(16.W) ## fq.io.deqData(15,0), 0.U), xLen = xLen, useAddiForMv = false).decode.bits
   val instData = Mux(instRvc, rvcExpanded, fq.io.deqData)
 
-  val fetchedPacket = Wire(Valid(new FetchQueueEntry()))
-  fetchedPacket.valid := fq.io.deq
-  fetchedPacket.bits.pc := curPC
+  issueEntry.valid := fq.io.deq
+  issueEntry.bits.pc := curPC
 
-  fetchedPacket.bits.data := bitPatToUInt(NOP)
-  fetchedPacket.bits.xcpt := fq.noXcptLit
-  fetchedPacket.bits.rvc := false.B
+  issueEntry.bits.data := bitPatToUInt(NOP)
+  issueEntry.bits.xcpt := fq.noXcptLit
+  issueEntry.bits.rvc := false.B
   when (fq.io.canDeq) {
-    fetchedPacket.bits.data := instData
-    fetchedPacket.bits.xcpt := fq.io.deqXcpt
-    fetchedPacket.bits.rvc := instRvc
+    issueEntry.bits.data := instData
+    issueEntry.bits.xcpt := fq.io.deqXcpt
+    issueEntry.bits.rvc := instRvc
   }
-  io.fetchedPacket := fetchedPacket
+
+  io.issue <> issueEntry
 
   // Used to tval register update when illegal instruction exception occurs
   // And trigger, it should be used to raw instructions including RVC
   io.instRaw := (0.U(16.W) & fq.io.deqData(31,16)) ## fq.io.deqData(15,0)
 
-  when(!io.stall) {
+  when(issueEntry.ready) {
     when(regJumpNextCycle || jumpCurrentCycle){
       curPC := targetAddr
-    }.elsewhen(fetchedPacket.valid) {
-      curPC := Mux(fetchedPacket.bits.rvc, curPC + 2.U, curPC + 4.U)
+    }.elsewhen(issueEntry.valid) {
+      curPC := Mux(issueEntry.bits.rvc, curPC + 2.U, curPC + 4.U)
     }
   }.otherwise {
     curPC := curPC
@@ -361,8 +332,6 @@ class Frontend(implicit p: Parameters) extends CoreModule {
 
   val ignoreCount = RegInit(0.U(2.W))
   when (flush) {
-//  when (flush || regFlush) {
-//     To decouple request and jump on next cycle, request will go out but ack will be ignored
     ignoreCount := fq.io.inflightCount - (io.epm.ack && io.epm.gnt) + (jumpNextCycle && fq.io.allocateSucceed)
   }.otherwise {
     ignoreCount := Mux(ignoreCount =/= 0.U, ignoreCount - 1.U, 0.U)
