@@ -162,6 +162,15 @@ class FetchQueueEntry(implicit p: Parameters) extends CoreBundle {
  val rvc = Bool()
 }
 
+class IFIEPipelineEntry(implicit p: Parameters) extends CoreBundle {
+ val k = p(KLASE32ParamKey)
+
+ val pc = UInt(k.vaddrBits.W)
+ val data = UInt(k.fetchBits.W)
+ val xcpt = new HeartXcpt
+ val rvc = Bool()
+}
+
 
 class StoreBufferEntry(implicit p: Parameters) extends CoreBundle {
  val k = p(KLASE32ParamKey)
