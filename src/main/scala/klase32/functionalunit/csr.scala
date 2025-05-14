@@ -1,4 +1,4 @@
-package klase32
+package klase32.functionalunit
 
 import chisel3._
 import freechips.rocketchip.rocket.Causes
@@ -10,96 +10,153 @@ import klase32.include.Interrupt
 import klase32.include.config._
 import klase32.include.Constants
 import klase32.include.param.KLASE32ParamKey
+import klase32.common.FunctionUnitIO
 
-import scala.collection.mutable.LinkedHashMap
-import scala.collection.mutable.Growable._
-
-// CSR control and R/W behavior
-
-class CSRCtrl(implicit p: Parameters)
-  extends CoreBundle
-    with HasCoreParameters {
-  val in = UInt(csrWidthM.W)
-  val inst = CSRControl()
-  val addr = UInt(12.W)
+// Bundles
+class CSRReq(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+  // CSR control and R/W behavior
+  val ctrl = new Bundle {
+    val in = UInt(csrWidthM.W)
+    val inst = CSRControl()
+    val addr = UInt(12.W)
+  }
+  val rd = UInt(regIdWidth.W)
 }
 
-class CSRIntfIO(implicit p: Parameters)
+class CSRResp(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+  val wbData = UInt(csrWidthM.W)  // writeback data from CSR to Register
+  val csrWriteFlush = Bool()      // transfer to Flush.IE
+  val rd = UInt(regIdWidth.W)
+}
+
+class CSRTrapSource(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+  class TrapSource (implicit p: Parameters) extends Bundle {
+    val exception = Bool()
+    val cause = UInt(Causes.all.length.W)
+    val pc = UInt(mxLen.W)
+  }
+  val ie = new TrapSource
+  val me = new TrapSource
+}
+
+
+class CSRDebug(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+//  val dbgFire = Bool() // broadcasting debug fire
+//  val regDbgMode = Bool() // broadcasting debug mode
+  val fire = Bool() // broadcasting debug fire
+  val mode = Bool() // broadcasting debug mode
+  val dpc = UInt(mxLen.W)         // broadcasting dpc
+}
+
+class CSRTriggerSource(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+  val k = p(KLASE32ParamKey)
+  val pc = UInt(mxLen.W) // Normally is ie stage pc
+  val instruction = UInt(32.W)
+  val loadAddr = UInt(k.vaddrBits.W) // valid load address
+  val storeAddr = UInt(k.vaddrBits.W) // valid store address
+  val loadData = UInt(k.dataWidth.W) // load data
+  val storeData = UInt(k.dataWidth.W) // store data
+}
+
+class CSRTriggerFire(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+  val debugMode = Bool() // broadcast trigger dmode
+  val loadData = Bool() // broadcast load trigger not to block writeback
+  val breakPoint = new Bundle {
+    val exe = Bool()
+    val load = Bool()
+    val store = Bool()
+  }
+}
+
+class CSRStatus(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+  val mcause = UInt(mxLen.W)
+  val mstatus = UInt(mxLen.W)
+  val mstatush = UInt(mxLen.W)
+  val mepc = UInt(mxLen.W)
+}
+
+class CSRSystemInstruction(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+  val ecall = EcallIE() // ecall enable from decoder
+  val ebreak = EbreakIE() // ebreak enable from decoder
+}
+
+class CSRReturnInstruction(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+  val mret = MRetIE() // mret enalbe from decoder
+  // for debugger
+  val dret = DRetIE() // dret enable from decoder
+}
+
+class CSRInterruptPending(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+//  val interruptPending = Output(Bool()) // interrupt pending from mstatus
+//  val interruptCause = Output(UInt(4.W)) // interrupt cause from mip and mie
+  val pending = Bool() // interrupt pending from mstatus
+  val cause = UInt(4.W) // interrupt cause from mip and mie
+}
+
+class CSRResetHartRequest(implicit p: Parameters) extends CoreBundle with HasCoreParameters {
+//  val regBooting = Input(Bool())          // for ResetHartRequest
+  val booting = Bool()          // for ResetHartRequest
+  val bootAddr = UInt(mxLen.W)     // for ResetHartRequest
+}
+
+// I/O
+class CSRSideband(implicit p: Parameters)
   extends CoreBundle
     with HasCoreParameters {
   val k = p(KLASE32ParamKey)
 
-  val ctrl = Input(new CSRCtrl())         // CSR control signal, op and address
+  val hartId = Input(UInt(hartIDWidth.W))
 
-  val wbData = Output(UInt(csrWidthM.W))  // writeback data from CSR to Register
-
-  val exception = Input(Bool())           // ieXcpt from checkExceptions()
-  val cause = Input(UInt(5.W))            // ieCause from checkExceptions()
-  val exceptionME = Input(Bool())
-  val causeME = Input(UInt(5.W))
-  val iePC = Input(UInt(mxLen.W))          // epc from ie_pc
-  val mePC = Input(UInt(mxLen.W))
-  val evec = Output(UInt(mxLen.W))        // vector address of exception
-  val ldAddrTrig = Input(UInt(k.vaddrBits.W))       // valid load address
-  val stAddrTrig = Input(UInt(k.vaddrBits.W))       // valid store address
-  val loadData = Input(UInt(k.dataWidth.W))       // load data
-  val storeData = Input(UInt(k.dataWidth.W))       // store data
-
-  val instr = Input(UInt(32.W))           // for tval, every cycle toggle
-
-  val interrupt = Input(new Interrupt)    // interrupt from sw, timer, external
-
-  val interruptPending = Output(Bool())   // interrupt pending from mstatus
-  val interruptCause = Output(UInt(4.W))  // interrupt cause from mip and mie
-
-  val hartId = Input(UInt(hartIDWidth.W)) // hartId
-
-  val ecall = Input(EcallIE())            // ecall enable from decoder
-  val ebreak = Input(EbreakIE())          // ebreak enable from decoder
-  val mret = Input(MRetIE())              // mret enalbe from decoder
-  val wfi = Input(WFIIE())                // wfi enable from decoder
-  // for debugger
-  val dret = Input(DRetIE())              // dret enable from decoder
-//  val wdata = Input(UInt(mxLen.W))        // store data for trigger
-  val dbgFire = Output(Bool())            // broadcasting debug fire
-  val regDbgMode = Output(Bool())         // broadcasting debug mode
-  val dpc = Output(UInt(mxLen.W))         // broadcasting dpc
-  val regBooting = Input(Bool())          // for ResetHartRequest
-  val bootAddr = Input(UInt(mxLen.W))     // for ResetHartRequest
-
-  val trigEnterDmodeFire = Output(Bool())           // broadcast trigger dmode
-  val trigFireLdData = Output(Bool())           // broadcast load trigger not to block writeback
-  val trigRaiseBreakPointFireExe = Output(Bool())           // broadcast trigger bp
-  val trigRaiseBreakPointFireLd = Output(Bool())           // broadcast trigger bp
-  val trigRaiseBreakPointFireSt = Output(Bool())           // broadcast trigger bp
-
-  val wfiOut = Output(Bool())             // for clock gating
-  val csrWriteFlush = Output(Bool())      // transfer to Flush.IE
-
-  val hpmIntf = new CSRPerfMonitorIntf
-  val toRomiControl = new CSRToRomiControl
-
-  // for debugger
-  //val dpc = Input(UInt(mxLen.W))
-}
-
-class CSRPerfMonitorIntf (implicit p: Parameters) extends CoreBundle with HasCoreParameters {
   val ie_inst_valid = Input(Bool())
+
+  val trap = Input(new CSRTrapSource())
+  val interrupt = Input(new Interrupt)    // interrupt from sw, timer, external
+  val interruptPending = Output(new CSRInterruptPending())
+
+  val debug = Output(new CSRDebug())
+  val trigSrc = Input(new CSRTriggerSource())
+  val trigFire = Output(new CSRTriggerFire())
+
+  val csr = Output(new CSRStatus())
+
+  val sys = Input(new CSRSystemInstruction())
+  val ret = Input(new CSRReturnInstruction())
+
+  val evec = Output(UInt(mxLen.W)) // vector address of exception
+
+  val resetReq = Input(new CSRResetHartRequest())
+
+  val wfi = Input(WFIIE()) // wfi enable from decoder
+  val wfiOut = Output(Bool()) // for clock gating
 }
 
-class CSRToRomiControl (implicit p: Parameters) extends CoreBundle with HasCoreParameters {
-  val mcause = Output(UInt(mxLen.W))
-  val mstatus = Output(UInt(mxLen.W))
-  val mstatush = Output(UInt(mxLen.W))
-  val mepc = Output(UInt(mxLen.W))
+// Dummy wrapper for function unit template
+class CSR(implicit p: Parameters) extends CoreModule
+with FunctionUnitIO[CSRReq, CSRResp] {
+  val req = IO(Flipped(Decoupled(new CSRReq)))
+  val resp = IO(Decoupled(new CSRResp))
+
+  val io = IO(new CSRSideband())
+
+  private val core = Module(new CSRCore)
+
+  core.req <> req.bits
+  resp.bits <> core.resp
+  io <> core.io
+
+  // Handshake
+  req.ready := true.B
+  resp.valid := req.valid // No delay
 }
 
-
-class CSRModule(implicit p: Parameters) extends CoreModule {
+class CSRCore(implicit p: Parameters) extends CoreModule {
   import klase32.include.CSR._
   import CSRControl._
 
-  val io = IO(new CSRIntfIO)
+  val req = IO(Input(new CSRReq))
+  val resp = IO(Output(new CSRResp))
+  val io = IO(new CSRSideband())
+
   val csr = new CSRList
   val exception = WireInit(false.B)
 
@@ -169,26 +226,25 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
 
   // Essential Counters
   csr.mcycle.count(!io.wfiOut, csr.mcounterinhibit.reg.asUInt(0))
-  csr.minstret.count(io.hpmIntf.ie_inst_valid && !exception, csr.mcounterinhibit.reg.asUInt(2))
+  csr.minstret.count(io.ie_inst_valid && !exception, csr.mcounterinhibit.reg.asUInt(2))
   // When lower 32-bit counter overflows, high 32-bit register increases
   if (xLen == 32) {
     csr.mcycleh.count(csr.mcycle.reg.asUInt(xLen - 1), false.B)
     csr.minstreth.count(csr.minstret.reg.asUInt(xLen - 1), false.B)
   }
 
-  val csrAddr = csrMap map {case (k, v) => k -> (io.ctrl.addr === k.U)}
+  val csrAddr = csrMap map {case (k, v) => k -> (req.ctrl.addr === k.U)}
 
   val a = for ((k, v) <- csrMap) yield (k)
   val b = for ((k, v) <- csrMap) yield (csrAddr(k) -> v)
-  io.wbData := Mux1H(for ((k, v) <- csrMap) yield (csrAddr(k) -> v.asUInt))
+  resp.wbData := Mux1H(for ((k, v) <- csrMap) yield (csrAddr(k) -> v.asUInt))
 
   // FIXME: CSR illegal instruction check
-  val wen = (io.ctrl.inst === RW) || (io.ctrl.inst === RS) || (io.ctrl.inst === RC)
+  val wen = (req.ctrl.inst === RW) || (req.ctrl.inst === RS) || (req.ctrl.inst === RC)
   val wdata = Mux1H(Seq(
-    (io.ctrl.inst === RW) -> io.ctrl.in,
-    (io.ctrl.inst === RS) -> (io.ctrl.in | io.wbData),
-    (io.ctrl.inst === RC) -> ((io.ctrl.in | io.wbData) & (~io.ctrl.in).asUInt),
-    //    (io.ctrl.inst === RC) -> ((io.wbData) & (~io.ctrl.in).asUInt),
+    (req.ctrl.inst === RW) -> req.ctrl.in,
+    (req.ctrl.inst === RS) -> (req.ctrl.in | resp.wbData),
+    (req.ctrl.inst === RC) -> ((req.ctrl.in | resp.wbData) & (~req.ctrl.in).asUInt),
   ))
 
   when (wen) {
@@ -309,45 +365,46 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     when(trigExeDataEn) {
 //      trigFireExe := csr.tdata2.reg.data === io.instr && (io.hpmIntf.ie_inst_valid)    // Only for valid instruction
       // FIXME: How to fix combinational loop?
-      trigFireExe := csr.tdata2.reg.data === io.instr    // Only for valid instruction
+      trigFireExe := csr.tdata2.reg.data === io.trigSrc.instruction    // Only for valid instruction
     }.elsewhen(trigExeAddrEn) {
 //      trigFireExe := csr.tdata2.reg.data === io.iePC && (io.hpmIntf.ie_inst_valid)     // Only for valid instruction
-      trigFireExe := csr.tdata2.reg.data === io.iePC     // Only for valid instruction
+      trigFireExe := csr.tdata2.reg.data === io.trigSrc.pc     // Only for valid instruction
     }
     when(trigLdAddrEn) {
-      trigFireLdAddr := csr.tdata2.reg.data === io.ldAddrTrig
+      trigFireLdAddr := csr.tdata2.reg.data === io.trigSrc.loadAddr
     }
     when(trigLdDataEn) {
-      trigFireLdData := csr.tdata2.reg.data === io.loadData
+      trigFireLdData := csr.tdata2.reg.data === io.trigSrc.loadData
     }
     when(trigStAddrEn) {
-      trigFireSt := csr.tdata2.reg.data === io.stAddrTrig
+      trigFireSt := csr.tdata2.reg.data === io.trigSrc.storeAddr
     }.elsewhen(trigStDataEn) {
-      trigFireSt := csr.tdata2.reg.data === io.storeData
+      trigFireSt := csr.tdata2.reg.data === io.trigSrc.storeData
     }
   }
 
   trigFire := trigFireExe || trigFireSt || trigFireLdAddr || trigFireLdData
-  io.trigRaiseBreakPointFireExe := (mcontrol6.action === Constants.ActionType.Breakpoint) && trigFireExe
-  io.trigRaiseBreakPointFireLd  := (mcontrol6.action === Constants.ActionType.Breakpoint) && (trigFireLdAddr || trigFireLdData)
-  io.trigRaiseBreakPointFireSt  := (mcontrol6.action === Constants.ActionType.Breakpoint) && trigFireSt
-  io.trigEnterDmodeFire := (mcontrol6.action === Constants.ActionType.DMode) && trigFire
-  io.trigFireLdData := trigFireLdData
+  io.trigFire.breakPoint.exe := (mcontrol6.action === Constants.ActionType.Breakpoint) && trigFireExe
+  io.trigFire.breakPoint.load  := (mcontrol6.action === Constants.ActionType.Breakpoint) && (trigFireLdAddr || trigFireLdData)
+  io.trigFire.breakPoint.store  := (mcontrol6.action === Constants.ActionType.Breakpoint) && trigFireSt
+  io.trigFire.debugMode := (mcontrol6.action === Constants.ActionType.DMode) && trigFire
+  io.trigFire.loadData := trigFireLdData
 
   val ebreakToDebugMode = WireInit(false.B)
-  ebreakToDebugMode := io.ebreak.asUInt.orR && ((csr.dcsr.reg.ebreaks && (priv===Constants.Privilege.SMode)) || (csr.dcsr.reg.ebreaku && (priv===Constants.Privilege.UMode)) || (csr.dcsr.reg.ebreakm && (priv===Constants.Privilege.MMode)))
-  exception := io.ecall.asUInt.orR ||
-    (io.ebreak.asUInt.orR && !ebreakToDebugMode) ||
-    io.exception ||
-    io.exceptionME
+  ebreakToDebugMode := io.sys.ebreak.asUInt.orR && ((csr.dcsr.reg.ebreaks && (priv===Constants.Privilege.SMode)) ||
+    (csr.dcsr.reg.ebreaku && (priv===Constants.Privilege.UMode)) || (csr.dcsr.reg.ebreakm && (priv===Constants.Privilege.MMode)))
+  exception := io.sys.ecall.asUInt.orR ||
+    (io.sys.ebreak.asUInt.orR && !ebreakToDebugMode) ||
+    io.trap.ie.exception ||
+    io.trap.me.exception
 
   val debugFire = WireInit(0.B)
-  val singleStep = io.hpmIntf.ie_inst_valid && !regDebugMode && csr.dcsr.reg.step
+  val singleStep = io.ie_inst_valid && !regDebugMode && csr.dcsr.reg.step
   // After single step, PC must be fired by debugFire!
-  debugFire := (io.interrupt.d && !regDebugMode) || singleStep || io.trigEnterDmodeFire
-  regDebugMode := Mux(regDebugMode && io.dret.asUInt.orR, false.B, debugFire || regDebugMode)
-  io.dbgFire := debugFire
-  io.regDbgMode := regDebugMode
+  debugFire := (io.interrupt.d && !regDebugMode) || singleStep || io.trigFire.debugMode
+  regDebugMode := Mux(regDebugMode && io.ret.dret.asUInt.orR, false.B, debugFire || regDebugMode)
+  io.debug.fire := debugFire
+  io.debug.mode := regDebugMode
 
   // Exception
   // tval
@@ -359,31 +416,31 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
   // 3. illegal instruction exception --> faulting instruction bits
   val tval = WireDefault(0.U(xLen.W))
   when(
-    io.cause === Causes.breakpoint.U ||
-      io.cause === Causes.machine_ecall.U
+    io.trap.ie.cause === Causes.breakpoint.U ||
+      io.trap.ie.cause === Causes.machine_ecall.U
   ) {
-    tval := io.iePC
-  }.elsewhen(io.cause === Causes.illegal_instruction.U) {
-    tval := io.instr
+    tval := io.trap.ie.pc
+  }.elsewhen(io.trap.ie.cause === Causes.illegal_instruction.U) {
+    tval := io.trigSrc.instruction
   }.elsewhen(
-    io.cause === Causes.misaligned_fetch.U ||
-      io.cause === Causes.fetch_page_fault.U ||
-      io.cause === Causes.fetch_guest_page_fault.U ||
-      io.cause === Causes.fetch_access.U ||
-      io.cause === Causes.misaligned_store.U ||
-      io.cause === Causes.store_page_fault.U ||
-      io.cause === Causes.store_guest_page_fault.U ||
-      io.cause === Causes.store_access.U
+    io.trap.ie.cause === Causes.misaligned_fetch.U ||
+      io.trap.ie.cause === Causes.fetch_page_fault.U ||
+      io.trap.ie.cause === Causes.fetch_guest_page_fault.U ||
+      io.trap.ie.cause === Causes.fetch_access.U ||
+      io.trap.ie.cause === Causes.misaligned_store.U ||
+      io.trap.ie.cause === Causes.store_page_fault.U ||
+      io.trap.ie.cause === Causes.store_guest_page_fault.U ||
+      io.trap.ie.cause === Causes.store_access.U
   ) {
     // FIXME: Implement
     tval := 0.U
   }.elsewhen(
-    io.cause === Causes.misaligned_load.U ||
-      io.cause === Causes.load_page_fault.U ||
-      io.cause === Causes.load_guest_page_fault.U ||
-      io.cause === Causes.load_access.U
+    io.trap.me.cause === Causes.misaligned_load.U ||
+      io.trap.me.cause === Causes.load_page_fault.U ||
+      io.trap.me.cause === Causes.load_guest_page_fault.U ||
+      io.trap.me.cause === Causes.load_access.U
   ) {
-    tval := io.ldAddrTrig
+    tval := io.trigSrc.loadAddr
   }.otherwise {
     tval := 0.U
   }
@@ -410,8 +467,8 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
   // When taken, interrupt will jump to ISR
   val mInterruptPending = (csr.mie.reg.asUInt & mip.asUInt).orR
   val mInterruptToBeTaken = mInterruptPending && csr.mstatus.reg.mie
-  io.interruptPending := mInterruptToBeTaken
-  io.interruptCause := Mux1H (Seq(
+  io.interruptPending.pending := mInterruptToBeTaken
+  io.interruptPending.cause := Mux1H (Seq(
     (mip.debug && csr.mie.reg.debug) -> 14.U,
     (mip.meip && csr.mie.reg.meip) -> 11.U,
     (mip.mtip && csr.mie.reg.mtip) -> 7.U,
@@ -425,19 +482,19 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     csr.mstatus.reg.mpie := csr.mstatus.reg.mie
     csr.mstatus.reg.mpp := priv
     csr.mstatus.reg.mie := false.B
-    when(io.exceptionME) {
-      csr.mepc.write(io.mePC)
-      csr.mcause.write(io.causeME)
+    when(io.trap.me.exception) {
+      csr.mepc.write(io.trap.me.pc)
+      csr.mcause.write(io.trap.me.cause)
     }.otherwise {
-      csr.mepc.write(io.iePC)
-      csr.mcause.write(io.cause)
+      csr.mepc.write(io.trap.ie.pc)
+      csr.mcause.write(io.trap.ie.cause)
     }
     csr.mtval.write(tval)
     io.evec := Mux1H(Seq(
       (csr.mtvec.reg.mode === 0.U) -> (csr.mtvec.reg.base << 2.U),
-      (csr.mtvec.reg.mode === 1.U) -> ((csr.mtvec.reg.base << 2.U) + (io.cause << 2.U))
+      (csr.mtvec.reg.mode === 1.U) -> ((csr.mtvec.reg.base << 2.U).asUInt + (io.trap.ie.cause << 2.U).asUInt)
     ))
-  }.elsewhen (io.mret.asUInt.orR) {
+  }.elsewhen (io.ret.mret.asUInt.orR) {
     csr.mstatus.reg.mie := csr.mstatus.reg.mpie
     csr.mstatus.reg.mpie := true.B
     csr.mepc.read(io.evec)
@@ -449,9 +506,9 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     priv := Constants.Privilege.MMode
   }.elsewhen(debugFire) {
     priv := Constants.Privilege.MMode
-  }.elsewhen(io.mret.asUInt.orR) {
+  }.elsewhen(io.ret.mret.asUInt.orR) {
     priv := csr.mstatus.reg.mpp
-  }.elsewhen(io.dret.asUInt.orR) {
+  }.elsewhen(io.ret.dret.asUInt.orR) {
     priv := csr.dcsr.reg.prv
   }
 
@@ -463,8 +520,8 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
   // Priority of dcsr.cause
   // resethaltreq -> haltgroup -> haltreq -> trigger -> ebreak -> step
   dbgCause := PriorityMux(Seq(
-    (!singleStep && debugFire && io.regBooting) -> Constants.DebugCause.ResetHartReq,
-    (!singleStep && debugFire && !io.regBooting) -> Constants.DebugCause.HartReq,
+    (!singleStep && debugFire && io.resetReq.booting) -> Constants.DebugCause.ResetHartReq,
+    (!singleStep && debugFire && !io.resetReq.booting) -> Constants.DebugCause.HartReq,
     trigFire -> Constants.DebugCause.Trigger,
     ebreakToDebugMode -> Constants.DebugCause.EBreak,
     csr.dcsr.reg.step -> Constants.DebugCause.SingleStep,
@@ -482,12 +539,12 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     //    (csr.dcsr.reg.cause === Constants.DebugCause.EBreak) -> io.iePC,
     //    (csr.dcsr.reg.cause === Constants.DebugCause.HartReq) -> io.iePC,
     //    (csr.dcsr.reg.cause === Constants.DebugCause.GroupHartReq) -> io.iePC,
-    (dbgCause === Constants.DebugCause.ResetHartReq) -> io.bootAddr,
-    ((dbgCause === Constants.DebugCause.Trigger) && trigLdDataEn) -> (io.iePC + Mux(io.iePC(1), 2.U, 4.U)),
-    (dbgCause === Constants.DebugCause.SingleStep) -> (io.iePC + Mux(io.iePC(1), 2.U, 4.U)),
-    (dbgCause === Constants.DebugCause.EBreak) -> io.iePC,
-    (dbgCause === Constants.DebugCause.HartReq) -> io.iePC,
-    (dbgCause === Constants.DebugCause.GroupHartReq) -> io.iePC,
+    (dbgCause === Constants.DebugCause.ResetHartReq) -> io.resetReq.bootAddr,
+    ((dbgCause === Constants.DebugCause.Trigger) && trigLdDataEn) -> (io.trigSrc.pc + Mux(io.trigSrc.pc(1), 2.U, 4.U)),
+    (dbgCause === Constants.DebugCause.SingleStep) -> (io.trigSrc.pc + Mux(io.trigSrc.pc(1), 2.U, 4.U)),
+    (dbgCause === Constants.DebugCause.EBreak) -> io.trigSrc.pc,
+    (dbgCause === Constants.DebugCause.HartReq) -> io.trigSrc.pc,
+    (dbgCause === Constants.DebugCause.GroupHartReq) -> io.trigSrc.pc,
   ))
   when(debugFire) {
     csr.dpc.reg.data := dpcComb
@@ -502,7 +559,7 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
     (csr.dcsr.reg.cause === Constants.DebugCause.GroupHartReq) -> io.iePC,
   ))
   */
-  io.dpc := csr.dpc.reg.data
+  io.debug.dpc := csr.dpc.reg.data
   //csr.dpc.read(io.dpc)//csr.dpc.reg.data
 
   // WFI
@@ -516,12 +573,15 @@ class CSRModule(implicit p: Parameters) extends CoreModule {
   io.wfiOut := wfi
 
   // CSR write results in stall and flush
-  val writeFlush = !((io.ctrl.addr | 3.U << 8) >= CSRAddr.mscratch.U && (io.ctrl.addr | 3.U << 8) <= CSRAddr.mtval.U)
-  io.csrWriteFlush := wen && writeFlush
+  val writeFlush = !((req.ctrl.addr | (3.U << 8).asUInt) >= CSRAddr.mscratch.U &&
+    (req.ctrl.addr | (3.U << 8).asUInt) <= CSRAddr.mtval.U)
+  resp.csrWriteFlush := wen && writeFlush
 
   // To romiControl
-  csr.mcause.read(io.toRomiControl.mcause)
-  csr.mstatus.read(io.toRomiControl.mstatus)
-  csr.mstatush.read(io.toRomiControl.mstatush)
-  csr.mepc.read(io.toRomiControl.mepc)
+  csr.mcause.read(io.csr.mcause)
+  csr.mstatus.read(io.csr.mstatus)
+  csr.mstatush.read(io.csr.mstatush)
+  csr.mepc.read(io.csr.mepc)
+
+  resp.rd := req.rd
 }
