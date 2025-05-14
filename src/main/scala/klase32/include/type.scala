@@ -178,6 +178,7 @@ object types {
         _.e -> false.B,
         _.t -> false.B,
         _.s -> false.B,
+        _.d -> false.B,
       )
     }
   }
