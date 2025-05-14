@@ -9,43 +9,50 @@ import klase32.include.param.KLASE32ParamKey
 
 
 object param {
+  case class KLASE32CoreDIVParam(
+                                useClz: Boolean = true
+                                )
   case class KlasE32CoreParam(
-                               usingMulDiv: Boolean = true,
-                               usingAtomics: Boolean = false,
-                               fLen: Int = 0,
-                               usingVector: Boolean = false,
-                               usingCompressed: Boolean = true,
-                               usingRVE: Boolean = false,
-                               customIsaExt: Option[String] = None,
-                               usingSupervisor: Boolean = false,
-                               usingHypervisor: Boolean = false,
-                               usingUser: Boolean = false,
-                               usingOuterBootAddr: Boolean = true,
-                               mpyLatency: Int = 2,
-                               bootAddr: BigInt = BigInt(0x0008_0000L),
-                               // for debugger
-                               debugAddr: BigInt = BigInt(0x6000_0800L),
-                               debugExceptionAddr: BigInt = BigInt(0x6000_0808L),
+                             usingMulDiv: Boolean = true,
+                             usingAtomics: Boolean = false,
+                             fLen: Int = 0,
+                             usingVector: Boolean = false,
+                             usingCompressed: Boolean = true,
+                             usingRVE: Boolean = false,
+                             customIsaExt: Option[String] = None,
+                             usingSupervisor: Boolean = false,
+                             usingHypervisor: Boolean = false,
+                             usingUser: Boolean = false,
+                             usingOuterBootAddr: Boolean = true,
+                             mpyLatency: Int = 2,
+                             bootAddr: BigInt = BigInt(0x0008_0000L),
+                             // for debugger
+                             debugAddr: BigInt = BigInt(0x6000_0800L),
+                             debugExceptionAddr: BigInt = BigInt(0x6000_0808L),
 
-                               mxLen: Int = 32,
-                               sxLen: Int = 32,
-                               uxLen: Int = 32,
+                             mxLen: Int = 32,
+                             sxLen: Int = 32,
+                             uxLen: Int = 32,
 
-                               readportNum: Int = 2,
-                               writeportNum: Int = 1,
+                             readportNum: Int = 2,
+                             writeportNum: Int = 1,
 
-                               outstandingLoad: Int = 2,
-                               fetchQueueEntries: Int = 3,
-                               useInstKill: Boolean = false,
-                               loadstorequeueEntries: Int = 4,
-                               storeBufferEntries: Int = 0,
+                             outstandingLoad: Int = 2,
+                             fetchQueueEntries: Int = 3,
+                             useInstKill: Boolean = false,
+                             loadstorequeueEntries: Int = 4,
+                             storeBufferEntries: Int = 0,
 
-                               causeWidth: Int = 4,
-                               hartIDWidth: Int = 4,
+                             causeWidth: Int = 4,
+                             hartIDWidth: Int = 4,
 
-                               addressAlignByte: Int = 4,
+                             addressAlignByte: Int = 4,
 
-                               issueWidth: Int = 1
+                             issueWidth: Int = 1,
+
+                             divParam: KLASE32CoreDIVParam = KLASE32CoreDIVParam(
+                               useClz = true
+                             )
                              )
   case class KlasE32Param(
                            vaddrBits: Int = 32,
@@ -147,6 +154,7 @@ object KLASE32AbstractClass {
     def issueBits = issueWidth * 32
 
     def mpyLatency = coreParams.mpyLatency
+    def divParam = coreParams.divParam
   }
 
   abstract class CoreModule(implicit val p: Parameters) extends Module with HasCoreParameters
